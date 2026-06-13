@@ -30,3 +30,7 @@ generate_stress_test.py
 *.njsproj
 *.sln
 *.swp
+
+# Experimental / Test / Mock projects
+devtasks/
+projects/
