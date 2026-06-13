@@ -110,7 +110,7 @@
     {
       "id": "docker",
       "type": "infrastructure",
-      "status": "FAILED",
+      "status": "OPERATIONAL",
       "transport": "stdio",
       "capabilities": [
         "container-mgmt",
@@ -130,7 +130,7 @@
     {
       "id": "playwright",
       "type": "browser",
-      "status": "CONFIGURED",
+      "status": "OPERATIONAL",
       "transport": "stdio",
       "capabilities": [
         "browser-automation",

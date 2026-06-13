@@ -48,21 +48,66 @@ class AgentLoader:
 
         return self.agents
 
-    def get_agent_context(self, agent_id: str) -> Optional[Dict]:
-        """Construye el contexto operativo para un agente específico."""
+    def build_context_for_agent(self, agent_id: str) -> Optional[Dict]:
+        """Construye un contexto filtrado y optimizado para un agente específico, reduciendo tokens."""
         agent = self.agents.get(agent_id)
         if not agent:
             return None
 
-        with open(agent["instructions_file"], 'r', encoding='utf-8-sig') as f:
-            instructions = f.read()
+        # Cargar instrucciones base del agente
+        try:
+            with open(agent["instructions_file"], 'r', encoding='utf-8-sig') as f:
+                instructions = f.read()
+        except Exception as e:
+            logger.error(f"Error leyendo instrucciones para {agent_id}: {str(e)}")
+            instructions = f"# {agent['role']}\nInstrucciones no disponibles."
+
+        # Mapeo de archivos de memoria relevantes por rol de agente para optimización de tokens
+        memory_mapping = {
+            "psycho-ceo": ["active_context.md", "project_state.json", "tasks.md", "decisions.md"],
+            "agent-evaluator": ["active_context.md", "requirements.md", "architecture.md", "lessons_learned.md"],
+            "product-manager": ["active_context.md", "requirements.md", "tasks.md"],
+            "frontend": ["active_context.md", "architecture.md", "tasks.md"],
+            "backend": ["active_context.md", "architecture.md", "tasks.md"],
+            "devops": ["active_context.md", "architecture.md", "tasks.md"],
+            "qa": ["active_context.md", "requirements.md", "lessons_learned.md"],
+            "security": ["active_context.md", "requirements.md", "lessons_learned.md"],
+            "ai-architect": ["active_context.md", "architecture.md", "decisions.md"],
+            "mcp-architect": ["active_context.md", "architecture.md", "decisions.md"],
+            "rag-architect": ["active_context.md", "architecture.md", "decisions.md"],
+            "context-engineer": ["active_context.md", "lessons_learned.md"]
+        }
+
+        # Cargar selectivamente memoria compartida
+        shared_memory_blocks = []
+        memory_dir = settings.MEMORY_DIR
+        files_to_load = memory_mapping.get(agent_id, ["active_context.md"])
+
+        for filename in files_to_load:
+            file_path = os.path.join(memory_dir, filename)
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8-sig') as f:
+                        content = f.read()
+                    shared_memory_blocks.append(f"### MEMORY: {filename}\n{content}\n")
+                except Exception as e:
+                    logger.warning(f"No se pudo cargar {filename} para {agent_id}: {str(e)}")
+
+        shared_memory_section = "\n## MEMORIA CENTRAL COMPARTIDA (FILTRADA/RELEVANTE)\n" + "\n".join(shared_memory_blocks) if shared_memory_blocks else ""
+
+        # Inyectar memoria al inicio de las instrucciones operativas
+        full_instructions = f"{shared_memory_section}\n\n# INSTRUCCIONES OPERATIVAS DEL ROL\n{instructions}"
 
         return {
             "id": agent["id"],
             "role": agent["role"],
-            "instructions": instructions,
+            "instructions": full_instructions,
             "working_directory": agent["path"]
         }
+
+    def get_agent_context(self, agent_id: str) -> Optional[Dict]:
+        """Mantiene compatibilidad con llamadas existentes usando el generador de contexto filtrado."""
+        return self.build_context_for_agent(agent_id)
 
 if __name__ == "__main__":
     loader = AgentLoader()

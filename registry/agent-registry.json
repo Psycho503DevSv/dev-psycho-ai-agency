@@ -1,35 +1,99 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "agents": [
     {
-      "id": "orchestrator",
-      "role": "Cerebro Central",
+      "id": "psycho-ceo",
+      "role": "CEO & Orchestrator Central",
       "status": "active",
-      "instructions": "agents/orchestrator/instructions.md",
+      "instructions": "agents/psycho-ceo/instructions.md",
       "memory_access": "full",
       "hierarchy_level": 1
     },
     {
-      "id": "project-manager",
-      "role": "Coordinador de Proyectos",
+      "id": "agent-evaluator",
+      "role": "Quality Controller",
       "status": "ready",
-      "instructions": "agents/project-manager/instructions.md",
+      "instructions": "agents/agent-evaluator/instructions.md",
       "memory_access": "read-write",
       "hierarchy_level": 2
     },
     {
-      "id": "ai-engineer",
-      "role": "Ingeniero de IA",
+      "id": "product-manager",
+      "role": "Product Manager",
       "status": "ready",
-      "instructions": "agents/ai-engineer/instructions.md",
+      "instructions": "agents/product-manager/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 2
+    },
+    {
+      "id": "frontend",
+      "role": "Frontend Engineer",
+      "status": "ready",
+      "instructions": "agents/frontend/instructions.md",
       "memory_access": "read-write",
       "hierarchy_level": 3
     },
     {
-      "id": "knowledge-manager",
-      "role": "Gestor de Conocimiento",
+      "id": "backend",
+      "role": "Backend Engineer",
       "status": "ready",
-      "instructions": "agents/knowledge-manager/instructions.md",
+      "instructions": "agents/backend/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "devops",
+      "role": "DevOps Engineer",
+      "status": "ready",
+      "instructions": "agents/devops/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "qa",
+      "role": "QA Engineer",
+      "status": "ready",
+      "instructions": "agents/qa/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "security",
+      "role": "Security Engineer",
+      "status": "ready",
+      "instructions": "agents/security/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "ai-architect",
+      "role": "AI Architect",
+      "status": "ready",
+      "instructions": "agents/ai-architect/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "mcp-architect",
+      "role": "MCP Architect",
+      "status": "ready",
+      "instructions": "agents/mcp-architect/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "rag-architect",
+      "role": "RAG Architect",
+      "status": "ready",
+      "instructions": "agents/rag-architect/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "context-engineer",
+      "role": "Context Engineer",
+      "status": "ready",
+      "instructions": "agents/context-engineer/instructions.md",
       "memory_access": "read-write",
       "hierarchy_level": 3
     }

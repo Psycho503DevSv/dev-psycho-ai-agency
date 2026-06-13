@@ -1,45 +1,45 @@
-﻿{
+{
   "workflows": [
     {
       "id": "wf-discovery",
       "name": "Project Discovery",
       "trigger": "User request for new app/feature",
-      "steps": ["orchestrator", "knowledge-manager"],
-      "output_file": "docs/requirements.md"
+      "steps": ["psycho-ceo", "product-manager"],
+      "output_file": "memory/requirements.md"
     },
     {
       "id": "wf-planning",
       "name": "Project Planning",
       "trigger": "Requirements approved",
-      "steps": ["orchestrator", "project-manager"],
-      "output_file": "docs/architecture.md"
+      "steps": ["psycho-ceo", "ai-architect", "product-manager"],
+      "output_file": "memory/architecture.md"
     },
     {
       "id": "wf-implementation",
       "name": "Project Implementation",
       "trigger": "Roadmap ready",
-      "steps": ["orchestrator", "ai-engineer"],
-      "output_file": "src/*"
+      "steps": ["psycho-ceo", "frontend", "backend", "agent-evaluator"],
+      "output_file": "projects/{project_name}/*"
     },
     {
       "id": "wf-review",
       "name": "Project Review",
       "trigger": "Task complete",
-      "steps": ["orchestrator", "ai-engineer"],
+      "steps": ["psycho-ceo", "qa", "security", "agent-evaluator"],
       "output_file": "docs/qa-report.md"
     },
     {
       "id": "wf-maintenance",
       "name": "Project Maintenance",
       "trigger": "Bug report",
-      "steps": ["orchestrator", "ai-engineer", "knowledge-manager"],
+      "steps": ["psycho-ceo", "backend", "qa", "devops"],
       "output_file": "docs/maintenance-log.md"
     },
     {
       "id": "wf-build-project",
       "name": "Build Full Project",
       "trigger": "User spec for new tool",
-      "steps": ["orchestrator", "project-manager", "ai-engineer", "knowledge-manager"],
+      "steps": ["psycho-ceo", "product-manager", "ai-architect", "frontend", "backend", "agent-evaluator"],
       "output_file": "projects/{project_name}/*"
     }
   ]

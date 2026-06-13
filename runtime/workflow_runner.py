@@ -85,8 +85,8 @@ class WorkflowRunner:
                 logger.info(f"STATUS CHANGE: {self.status} - Excepción en paso {agent_id}. Ejecución interrumpida.")
                 return {"status": "FAIL", "error": str(e), "completed_steps": steps_execution}
 
-        # Quality Gate Integrado si es implementación
-        if "ai-engineer" in steps_execution:
+        # Quality Gate Integrado si es implementación o evaluación
+        if "agent-evaluator" in steps_execution or "backend" in steps_execution:
             project_path = os.path.join(self.projects_dir, project_name)
             logger.info(f"Iniciando Quality Gate para {project_path}...")
             # Si el proyecto aún no existe físicamente (simulación), el gate fallará o debe ser preventivo
