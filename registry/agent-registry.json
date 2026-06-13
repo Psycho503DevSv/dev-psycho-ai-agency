@@ -1,0 +1,37 @@
+{
+  "version": "1.1.0",
+  "agents": [
+    {
+      "id": "orchestrator",
+      "role": "Cerebro Central",
+      "status": "active",
+      "instructions": "agents/orchestrator/instructions.md",
+      "memory_access": "full",
+      "hierarchy_level": 1
+    },
+    {
+      "id": "project-manager",
+      "role": "Coordinador de Proyectos",
+      "status": "ready",
+      "instructions": "agents/project-manager/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 2
+    },
+    {
+      "id": "ai-engineer",
+      "role": "Ingeniero de IA",
+      "status": "ready",
+      "instructions": "agents/ai-engineer/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    },
+    {
+      "id": "knowledge-manager",
+      "role": "Gestor de Conocimiento",
+      "status": "ready",
+      "instructions": "agents/knowledge-manager/instructions.md",
+      "memory_access": "read-write",
+      "hierarchy_level": 3
+    }
+  ]
+}

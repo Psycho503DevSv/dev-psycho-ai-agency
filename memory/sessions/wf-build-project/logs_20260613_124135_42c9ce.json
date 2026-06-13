@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-06-13T12:41:35.036704",
+  "data": {
+    "project": "test-audit-project",
+    "step": "knowledge-manager",
+    "status": "success",
+    "role": "Gestor de Conocimiento"
+  }
+}

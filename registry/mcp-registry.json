@@ -1,0 +1,141 @@
+{
+  "last_update": "2026-06-13",
+  "configurations": [
+    {
+      "id": "filesystem",
+      "type": "core",
+      "server_url": "integrated",
+      "description": "VS Code Native Filesystem API",
+      "authorized_agents": [
+        {
+          "agent_id": "orchestrator",
+          "permissions": [
+            "read",
+            "write",
+            "delete"
+          ]
+        },
+        {
+          "agent_id": "ai-engineer",
+          "permissions": [
+            "read",
+            "write"
+          ]
+        },
+        {
+          "agent_id": "project-manager",
+          "permissions": [
+            "read",
+            "write"
+          ]
+        },
+        {
+          "agent_id": "knowledge-manager",
+          "permissions": [
+            "read",
+            "write"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "git",
+      "type": "core",
+      "server_url": "integrated",
+      "description": "VS Code Git API",
+      "authorized_agents": [
+        {
+          "agent_id": "orchestrator",
+          "permissions": [
+            "full"
+          ]
+        },
+        {
+          "agent_id": "ai-engineer",
+          "permissions": [
+            "commit",
+            "pull"
+          ]
+        }
+      ],
+      "status": "OPERATIONAL",
+      "transport": "stdio",
+      "capabilities": [
+        "read",
+        "commit",
+        "push"
+      ]
+    },
+    {
+      "id": "memory-layer",
+      "type": "custom",
+      "implementation": "markdown-based",
+      "path": "./memory",
+      "authorized_agents": [
+        {
+          "agent_id": "knowledge-manager",
+          "permissions": [
+            "full"
+          ]
+        },
+        {
+          "agent_id": "orchestrator",
+          "permissions": [
+            "read",
+            "query"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "type": "core",
+      "server_url": "integrated",
+      "description": "VS Code Integrated Browser",
+      "authorized_agents": [
+        {
+          "agent_id": "orchestrator",
+          "permissions": [
+            "full"
+          ]
+        },
+        {
+          "agent_id": "ai-engineer",
+          "permissions": [
+            "read"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "docker",
+      "type": "infrastructure",
+      "status": "FAILED",
+      "transport": "stdio",
+      "capabilities": [
+        "container-mgmt",
+        "image-mgmt"
+      ]
+    },
+    {
+      "id": "fetch",
+      "type": "web",
+      "status": "OPERATIONAL",
+      "transport": "http",
+      "capabilities": [
+        "web-scraping",
+        "api-fetch"
+      ]
+    },
+    {
+      "id": "playwright",
+      "type": "browser",
+      "status": "CONFIGURED",
+      "transport": "stdio",
+      "capabilities": [
+        "browser-automation",
+        "testing"
+      ]
+    }
+  ]
+}

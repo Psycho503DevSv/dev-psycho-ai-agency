@@ -1,0 +1,17 @@
+﻿{
+  "tools": [
+    {
+      "mcp_id": "filesystem",
+      "name": "write_file",
+      "schema": {
+        "path": "string",
+        "content": "string",
+        "encoding": "string?"
+      },
+      "constraints": {
+        "max_size_mb": 10,
+        "blocked_extensions": [".exe", ".dll", ".sh"]
+      }
+    }
+  ]
+}
