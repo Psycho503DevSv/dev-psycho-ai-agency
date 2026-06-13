@@ -346,6 +346,7 @@ textarea {
   font-weight: 900;
   text-transform: uppercase;
   background: linear-gradient(90deg, var(--accent), var(--accent-purple));
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 0 30px rgba(0, 243, 255, 0.2);
