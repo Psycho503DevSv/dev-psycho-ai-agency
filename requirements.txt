@@ -1,1 +1,5 @@
 requests
+graphiti-core
+openai
+python-dotenv
+nest-asyncio

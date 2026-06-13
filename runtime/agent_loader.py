@@ -80,6 +80,35 @@ class AgentLoader:
 
         # Cargar selectivamente memoria compartida
         shared_memory_blocks = []
+
+        # Cargar memoria semántica de Graphiti si está activado
+        if settings.USE_GRAPHITI:
+            try:
+                import asyncio
+                from runtime.graphiti_bridge import bridge
+                query = f"What is the current project state, details and task list for role {agent_id}?"
+                
+                loop = None
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass
+
+                if loop and loop.is_running():
+                    try:
+                        import nest_asyncio
+                        nest_asyncio.apply()
+                        facts = asyncio.run(bridge.search_context(query))
+                    except Exception:
+                        facts = []
+                else:
+                    facts = asyncio.run(bridge.search_context(query))
+
+                if facts:
+                    shared_memory_blocks.append("### MEMORIA SEMÁNTICA DINÁMICA (GRAPHITI)\n" + "\n".join([f"- {fact}" for fact in facts]) + "\n")
+            except Exception as e:
+                logger.warning(f"No se pudo recuperar memoria semántica de Graphiti para {agent_id}: {str(e)}")
+
         memory_dir = settings.MEMORY_DIR
         files_to_load = memory_mapping.get(agent_id, ["active_context.md"])
 

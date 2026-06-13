@@ -27,6 +27,13 @@ PATTERNS_DIR = os.path.join(MEMORY_DIR, "patterns")
 # Standards
 STANDARDS_DIR = os.path.join(BASE_DIR, "standards")
 
+# Graphiti & Neo4j Settings
+USE_GRAPHITI = os.getenv("USE_GRAPHITI", "false").lower() == "true"
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 LOG_LEVEL = "INFO"

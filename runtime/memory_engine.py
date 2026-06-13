@@ -17,7 +17,7 @@ class MemoryEngine:
         os.makedirs(self.patterns_path, exist_ok=True)
 
     def save_memory(self, session_id: str, data: Dict, category: str = "logs") -> str:
-        """Guarda un fragmento de memoria en la sesión activa."""
+        """Guarda un fragmento de memoria en la sesión activa y opcionalmente en Graphiti."""
         target_dir = os.path.join(self.sessions_path, session_id)
         os.makedirs(target_dir, exist_ok=True)
         
@@ -30,7 +30,33 @@ class MemoryEngine:
                 "data": data
             }, f, indent=2)
         
+        # Integración con Graphiti
+        if settings.USE_GRAPHITI:
+            try:
+                import asyncio
+                loop = None
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass
+
+                if loop and loop.is_running():
+                    loop.create_task(self._async_save_graphiti(session_id, data, category))
+                else:
+                    asyncio.run(self._async_save_graphiti(session_id, data, category))
+            except Exception as e:
+                # Silencioso para no romper flujo principal si falla la conexión
+                pass
+
         return file_path
+
+    async def _async_save_graphiti(self, session_id: str, data: Dict, category: str):
+        from runtime.graphiti_bridge import bridge
+        if not bridge._initialized:
+            await bridge.initialize()
+        if bridge._initialized:
+            content = f"Session: {session_id}. Category: {category}. Data: {json.dumps(data, ensure_ascii=False)}"
+            await bridge.add_episode(content, name=f"{category}_{session_id}", source_description=category)
 
     def retrieve_memory(self, session_id: str) -> List[Dict]:
         """Recupera toda la memoria de una sesión específica."""
@@ -56,7 +82,7 @@ class MemoryEngine:
             }, f, indent=2)
 
     def search(self, query: str, session_id: Optional[str] = None, category: Optional[str] = None) -> List[Dict]:
-        """Busca registros en la memoria filtrando por texto en el contenido JSON."""
+        """Busca registros en la memoria local y en Graphiti (si está disponible)."""
         results = []
         search_dirs = []
         if session_id:
@@ -88,7 +114,50 @@ class MemoryEngine:
                                 results.append(content)
                     except Exception:
                         pass
+
+        # Búsqueda semántica en Graphiti
+        if settings.USE_GRAPHITI:
+            try:
+                import asyncio
+                loop = None
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass
+
+                if loop and loop.is_running():
+                    # Si ya hay un bucle corriendo y no podemos usar asyncio.run, 
+                    # intentamos usar nest_asyncio para reentrada.
+                    try:
+                        import nest_asyncio
+                        nest_asyncio.apply()
+                        graph_facts = asyncio.run(self._async_search_graphiti(query))
+                    except Exception:
+                        # Si nest_asyncio falla, no bloqueamos el hilo
+                        graph_facts = []
+                else:
+                    graph_facts = asyncio.run(self._async_search_graphiti(query))
+
+                for fact in graph_facts:
+                    results.append({
+                        "timestamp": datetime.now().isoformat(),
+                        "data": {
+                            "source": "graphiti_semantic_memory",
+                            "fact": fact
+                        }
+                    })
+            except Exception:
+                pass
+
         return results
+
+    async def _async_search_graphiti(self, query: str) -> List[str]:
+        from runtime.graphiti_bridge import bridge
+        if not bridge._initialized:
+            await bridge.initialize()
+        if bridge._initialized:
+            return await bridge.search_context(query)
+        return []
 
 if __name__ == "__main__":
     engine = MemoryEngine()
