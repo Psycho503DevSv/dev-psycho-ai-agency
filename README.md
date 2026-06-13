@@ -157,12 +157,16 @@ El sistema tiene memoria persistente para no olvidar nada entre sesiones.
 
 ### Modos de Memoria
 
-#### 🗂️ Modo Local (Por defecto — sin configurar nada)
+#### 🗂️ Modo Local — **ACTIVO POR DEFECTO, no necesitas configurar nada**
 Guarda todo como archivos JSON en tu disco duro. **100% privado, gratuito y sin internet.**
+No necesitas crear ningún archivo `.env`. El sistema arranca en este modo automáticamente.
 
-#### 🕸️ Modo Graphiti / Neo4j (Avanzado — opcional)
-Para usuarios avanzados que quieren usar una base de datos de grafos semántica. Requiere Neo4j y OpenAI API Key. Se activa creando un archivo `.env`:
+#### 🕸️ Modo Graphiti / Neo4j — ⚠️ OPCIONAL y AVANZADO (no recomendado para empezar)
+> ⚠️ **Este modo está DESACTIVADO por defecto.** Solo configúralo si sabes lo que haces. Requiere instalar Neo4j y tener una API Key de OpenAI.
+
+Si en el futuro quisieras activarlo, creas un archivo `.env` en la raíz **con este valor en `true`**:
 ```ini
+# SOLO si quieres activar el modo grafo (no es necesario)
 USE_GRAPHITI=true
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
