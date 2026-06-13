@@ -61,7 +61,7 @@ Every feature must be implemented with future maintainability and readability in
 
 ## ⚙️ Requirements & Installation
 
-Dependencies are minimal. Ensure you have Python installed:
+Asegúrate de tener Python instalado y ejecuta:
 
 ```bash
 pip install -r requirements.txt
@@ -69,6 +69,49 @@ pip install -r requirements.txt
 
 ---
 
+## 🧠 Memory Management (Gestión de Memoria)
+
+El sistema soporta dos modos de almacenamiento de memoria central:
+
+1. **Modo Local (Por defecto):** Guarda la memoria en archivos JSON dentro del directorio local `memory/sessions/`. Es 100% gratuito y privado.
+2. **Modo Grafo Semántico (Graphiti + Neo4j):** Si deseas usar una base de datos de grafos para relacionar conceptos de forma avanzada, puedes configurar un archivo `.env` en la raíz con las siguientes variables:
+   ```ini
+   USE_GRAPHITI=true
+   NEO4J_URI=bolt://localhost:7687
+   NEO4J_USER=neo4j
+   NEO4J_PASSWORD=tu_contraseña
+   OPENAI_API_KEY=tu_api_key_de_openai
+   ```
+
+---
+
+## 🚀 Quick Start (Inicio Rápido)
+
+### Ejecutar un Workflow de Agentes
+Puedes correr flujos de trabajo predefinidos usando el `workflow_runner.py`:
+
+```bash
+python runtime/workflow_runner.py [workflow_id] [project_name]
+```
+
+*Ejemplo:*
+```bash
+python runtime/workflow_runner.py wf-discovery mi-proyecto-web
+```
+
+---
+
+## 🧪 Testing (Ejecución de Pruebas)
+
+Para correr las pruebas unitarias y verificar el correcto funcionamiento de los cargadores de agentes y motores de memoria:
+
+```bash
+python -m unittest tests/runtime/test_agent_loader.py
+python -m unittest tests/runtime/test_graphiti_memory.py
+```
+
+---
+
 ## 📄 License
 
-This project is open-source and available under the MIT License.
+Este proyecto es de código abierto bajo la Licencia MIT.
