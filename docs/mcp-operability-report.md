@@ -1,11 +1,11 @@
 # MCP OPERABILITY REPORT
-**Operability Score:** 71/100
-**Classification:** FUNCTIONAL
+**Operability Score:** 85/100
+**Classification:** ADVANCED
 
 | MCP | INSTALLED | CONNECTED | OPERATIONAL | TEST_RESULT | ERROR |
 | :--- | :---: | :---: | :---: | :--- | :--- |
 | filesystem | ✔️ | ✔️ | ✔️ | IO Access OK | - |
-| git | ✔️ | ❌ | ❌ | Git failure | - |
+| git | ✔️ | ✔️ | ✔️ | Repo status retrieved | - |
 | memory-layer | ✔️ | ✔️ | ✔️ | Memory folder detected | - |
 | browser | ✔️ | ✔️ | ✔️ | VS Code Context detected | - |
 | docker | ❌ | ❌ | ❌ | N/A | Docker not in PATH |

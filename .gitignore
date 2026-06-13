@@ -32,5 +32,4 @@ generate_stress_test.py
 *.swp
 
 # Experimental / Test / Mock projects
-devtasks/
 projects/

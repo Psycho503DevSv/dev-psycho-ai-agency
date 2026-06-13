@@ -1,0 +1,570 @@
+/* ─── Cyberpunk / Military HUD 2085 CSS System ────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Futuristic Colors */
+  --bg: #030306;
+  --bg-card: rgba(8, 10, 16, 0.75);
+  --bg-input: rgba(4, 5, 9, 0.9);
+  --border: rgba(0, 243, 255, 0.2);
+  --border-focus: rgba(0, 243, 255, 0.8);
+  --accent: #00f3ff;
+  --accent-purple: #7000ff;
+  --text: #c8d2db;
+  --text-muted: #6f7c8b;
+  --success: #00ff66;
+  --warn: #ffb700;
+  --danger: #ff0055;
+
+  /* Custom Glows */
+  --glow-cyan: 0 0 15px rgba(0, 243, 255, 0.4);
+  --glow-purple: 0 0 15px rgba(112, 0, 255, 0.4);
+  
+  /* Fluid Sizing System: Perfect from 2" micro-screens to 100" TVs */
+  --font-xs: clamp(0.6rem, 1.2vw + 0.2rem, 1rem);
+  --font-sm: clamp(0.75rem, 1.5vw + 0.3rem, 1.2rem);
+  --font-base: clamp(0.88rem, 1.8vw + 0.4rem, 1.5rem);
+  --font-md: clamp(1.1rem, 2.2vw + 0.5rem, 2rem);
+  --font-lg: clamp(1.4rem, 3vw + 0.6rem, 3.2rem);
+  --font-xl: clamp(1.8rem, 4vw + 0.8rem, 4.8rem);
+
+  --padding-xs: clamp(0.25rem, 0.8vw, 1rem);
+  --padding-sm: clamp(0.5rem, 1.5vw, 2rem);
+  --padding-md: clamp(1rem, 3vw, 4rem);
+  --padding-lg: clamp(1.5rem, 4.5vw, 6rem);
+  
+  --radius: 4px; /* Tactical squared corners */
+  --transition: cubic-bezier(0.16, 1, 0.3, 1) 0.3s;
+}
+
+body {
+  font-family: 'Share Tech Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.05em;
+  position: relative;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(3, 3, 6, 0.8);
+  border-left: 1px solid var(--border);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  box-shadow: var(--glow-cyan);
+}
+
+/* Scanline Effect Overlay */
+body::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 9999;
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Tactical HUD Header */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--padding-md);
+  height: clamp(50px, 8vh, 100px);
+  background: rgba(8, 10, 16, 0.85);
+  border-bottom: 2px solid var(--accent);
+  box-shadow: var(--glow-cyan);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+
+.navbar-brand {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-md);
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: var(--glow-cyan);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navbar-actions {
+  display: flex;
+  gap: var(--padding-sm);
+  align-items: center;
+}
+
+.main {
+  flex: 1;
+  padding: var(--padding-md);
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Auth Panels ─────────────────────────────────────────────────────────── */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--padding-md);
+}
+
+.auth-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-bottom: 4px solid var(--accent-purple);
+  padding: var(--padding-md);
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0, 243, 255, 0.05), var(--glow-purple);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Corner ticks for tactical feel */
+.auth-card::before, .auth-card::after, .card::before, .card::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-style: solid;
+  border-color: var(--accent);
+  pointer-events: none;
+}
+.auth-card::before, .card::before {
+  top: 5px; left: 5px;
+  border-width: 2px 0 0 2px;
+}
+.auth-card::after, .card::after {
+  bottom: 5px; right: 5px;
+  border-width: 0 2px 2px 0;
+}
+
+.auth-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-md);
+  font-weight: 800;
+  color: var(--accent);
+  text-shadow: var(--glow-cyan);
+  margin-bottom: 0.5rem;
+}
+
+.auth-sub {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  margin-bottom: var(--padding-sm);
+  text-transform: uppercase;
+}
+
+/* ─── Form elements ────────────────────────────────────────────────────────── */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: var(--padding-sm);
+}
+
+label {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+input, textarea, select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: clamp(0.5rem, 1.2vw, 1rem);
+  color: var(--text);
+  font-size: var(--font-sm);
+  font-family: inherit;
+  transition: var(--transition);
+  width: 100%;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--glow-cyan);
+  background: rgba(0, 243, 255, 0.05);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: clamp(0.5rem, 1.2vw, 1rem) clamp(1rem, 2vw, 2rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary {
+  background: rgba(0, 243, 255, 0.1);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  box-shadow: var(--glow-cyan);
+}
+
+.btn-primary:hover {
+  background: var(--accent);
+  color: #030306;
+  box-shadow: 0 0 25px var(--accent);
+  transform: translateY(-2px);
+}
+
+.btn-ghost {
+  background: rgba(8, 10, 16, 0.6);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--glow-cyan);
+}
+
+.btn-danger {
+  background: rgba(255, 0, 85, 0.1);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 20px var(--danger);
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ─── Cards (Holographic Tactical Modules) ────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  padding: var(--padding-sm);
+  position: relative;
+  transition: var(--transition);
+  backdrop-filter: blur(8px);
+}
+
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--glow-cyan), inset 0 0 10px rgba(0, 243, 255, 0.05);
+  transform: translateY(-2px);
+}
+
+/* ─── Dashboard grid & panels ───────────────────────────────────────────────── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: var(--padding-sm);
+  margin-top: var(--padding-sm);
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--padding-sm);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--padding-xs);
+  gap: var(--padding-sm);
+}
+
+.dashboard-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-md);
+  font-weight: 900;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--accent), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(0, 243, 255, 0.2);
+}
+
+/* Status Panels */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--padding-sm);
+  margin-bottom: var(--padding-sm);
+}
+
+.stat-card {
+  text-align: center;
+  border-top: 2px solid var(--border);
+  position: relative;
+}
+
+.stat-num {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-lg);
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: var(--glow-cyan);
+}
+
+.stat-label {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+/* Task cards */
+.task-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--padding-xs);
+}
+
+.task-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--padding-sm);
+}
+
+.task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.task-desc {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  font-size: var(--font-xs);
+}
+
+.task-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Tactical Panel (Threat / Neural Streams) */
+.tactical-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--padding-sm);
+}
+
+.tactical-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: var(--padding-sm);
+  position: relative;
+}
+
+.panel-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-todo {
+  background: rgba(111, 124, 139, 0.15);
+  color: var(--text-muted);
+  border: 1px solid var(--text-muted);
+}
+.badge-in_progress {
+  background: rgba(255, 183, 0, 0.15);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+.badge-done {
+  background: rgba(0, 255, 102, 0.15);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 3, 6, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal {
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  box-shadow: var(--glow-cyan);
+  padding: var(--padding-md);
+  width: 100%;
+  max-width: 500px;
+  position: relative;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--padding-sm);
+}
+
+.modal-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: var(--font-sm);
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: var(--padding-sm);
+}
+
+/* Alert / Warning */
+.alert {
+  padding: 0.5rem 1rem;
+  font-size: var(--font-xs);
+  border-radius: var(--radius);
+  margin-bottom: var(--padding-xs);
+}
+.alert-error {
+  background: rgba(255, 0, 85, 0.15);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+/* Empty placeholder */
+.empty {
+  text-align: center;
+  padding: var(--padding-md);
+  color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Utilities */
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+.link-btn:hover {
+  text-shadow: var(--glow-cyan);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
