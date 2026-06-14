@@ -86,6 +86,7 @@ class WorkflowRunner:
                 return {"status": "FAIL", "error": str(e), "completed_steps": steps_execution}
 
         # Quality Gate Integrado si es implementación o evaluación
+        gate_result = None
         if "agent-evaluator" in steps_execution or "backend" in steps_execution:
             project_path = os.path.join(self.projects_dir, project_name)
             logger.info(f"Iniciando Quality Gate para {project_path}...")
@@ -98,14 +99,24 @@ class WorkflowRunner:
                         logger.warning(f"Quality Gate FAIL: {gate_result['errors']}")
                         self.status = "FAILED"
                         logger.info(f"STATUS CHANGE: {self.status} - Quality Gate fallido.")
-                        return {"status": "FAIL", "error": "Quality Gate Errors", "details": gate_result}
                 except Exception as e:
                     logger.error(f"Error ejecutando Quality Gate: {str(e)}")
                     self.status = "FAILED"
                     logger.info(f"STATUS CHANGE: {self.status} - Error en Quality Gate.")
-                    return {"status": "FAIL", "error": f"Error en Quality Gate: {str(e)}"}
             else:
                 logger.warning(f"Project path {project_path} no existe. Gate saltado en modo simulación.")
+
+        # Trigger Auto Learner
+        try:
+            from auto_learner import AutoLearner
+            learner = AutoLearner()
+            q_errors = gate_result["errors"] if gate_result else None
+            learner.extract_and_learn(session_id=workflow_id, workflow_id=workflow_id, status=self.status, quality_errors=q_errors)
+        except Exception as le:
+            logger.warning(f"No se pudo ejecutar el autoaprendizaje al final del workflow: {str(le)}")
+
+        if self.status == "FAILED":
+            return {"status": "FAIL", "error": "Workflow execution failed or Quality Gate errors", "details": gate_result}
 
         report = {
             "workflow_id": workflow_id,

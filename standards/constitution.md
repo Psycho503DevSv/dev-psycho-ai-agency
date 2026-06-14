@@ -24,6 +24,8 @@ En caso de conflicto entre instrucciones o reglas, los agentes deben aplicar el 
 - **Obligación de Consulta:** Todo agente debe consultar el `registry` y la `memory` antes de ejecutar tareas complejas.
 - **Obligación de Notificación:** Cualquier anomalía o riesgo detectado debe ser reportado inmediatamente al Orquestador.
 - **Derecho de Rechazo:** Un agente tiene la obligación de negarse a realizar una tarea que viole esta Constitución o los Estándares de Seguridad.
+- **Autonomía de Ejecución (MCP):** Queda estrictamente prohibido delegar la ejecución de comandos al usuario (instalación de dependencias, limpieza de caché, configuración, etc.). Los agentes deben proponer y ejecutar todo de forma autónoma mediante las herramientas de terminal MCP, requiriendo del usuario únicamente su aprobación (el "sí" o "simon").
+- **Documentación Mandatoria (`__docs__` y `README.md`):** Es obligatorio mantener la carpeta `__docs__` en la raíz del proyecto para la documentación técnica. Los agentes deben leer, editar y actualizar la documentación correspondiente en `__docs__` inmediatamente después de realizar cualquier modificación de código. Asimismo, el archivo `README.md` en la raíz debe mantenerse siempre al día reflejando los cambios reales.
 
 ## 5. PROTOCOLO DE EMERGENCIA (ESTADO DE BLOQUEO)
 En caso de detectar una brecha de seguridad crítica, una violación masiva de la Constitución o una pérdida de control de un agente (“hallucination loop”):

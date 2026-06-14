@@ -15,13 +15,13 @@ A pesar de la política de idioma, los identificadores de código siguen el est�
 - **Constantes:** `UPPER_SNAKE_CASE` (ej. `MAX_RETRY_ATTEMPTS`).
 - **Tablas BD:** `snake_case_plural` (ej. `user_profiles`).
 
-## 4. ESTILO VISUAL Y UI (Estilo Terminal Militar Prohibida 2085)
-- **Estética Inmersiva Obligatoria:** Las interfaces no deben parecer dashboards corporativos planos tradicionales (como Trello/Jira). Deben recordar a una terminal militar clasificada del año 2085 con estética Cyberpunk, Blade Runner, e interfaces tácticas tipo JARVIS/Ghost in the Shell.
-- **Sistemas de Materiales y Colores Exóticos:** Uso preferencial de Graphene Black, Titanium Silver, Electric Cyan y Aurora Violet/Blue. Estructuras con Glassmorphic con bordes HUD de color neón y esquinas tácticas tipo corchetes.
-- **Fondos Vivos Interactivos:** Utilizar siempre un motor de fondo vivo animado interactivo (con Canvas/WebGL) que simule redes neuronales, partículas de plasma, niebla volumétrica y escáneres láser.
-- **Tipografía Fluid & clamp():** Toda fuente y espaciado debe escalar automáticamente usando fórmulas fluidas (`clamp()`, `vw`, `vh`) para garantizar que la interfaz mantenga simetría matemática desde una mini pantalla de 2 pulgadas hasta una pantalla gigante o TV de 100 pulgadas sin romperse.
-- **Microinteracciones Exageradas y 3D:** Tarjetas con efectos interactivos de inclinación 3D (Z-axis perspective shift), botones con brillo holográfico al pasar el mouse, animaciones elásticas y efectos de texto cifrado/descifrado (text-scramble) al renderizar contenido.
-- **Iconografía Activa:** Los iconos deben tener comportamiento operacional (pulsos, órbitas, rotaciones o efectos de radar).
+## 4. ESTILO VISUAL Y UI (Diseño Exótico, Moderno y Premium)
+- **Estética Inmersiva Fuera de lo Común:** Las interfaces deben destacar de inmediato, evitando los diseños planos convencionales. Uso libre y creativo de estilos no tradicionales, animaciones dinámicas y componentes de alto impacto visual.
+- **Gradientes y Colores de Alto Impacto:** Uso de gradientes de texto exóticos y desvanecimientos multitono (2 o 3 colores en armonía como acentos principales) para títulos y elementos de llamada a la acción.
+- **Tipografía Exótica y Fluida:** Fuentes no tradicionales y combinaciones tipográficas modernas seleccionadas por el agente. Todo debe escalar automáticamente con fórmulas fluidas (`clamp()`, `vw`, `vh`).
+- **Fondos Vivos de Libre Criterio:** Integrar fondos dinámicos basados en Canvas/WebGL que aporten vida al diseño. Pueden simular redes neuronales, dinámicas de fluidos, auroras cambiantes, ondas de plasma o partículas de luz, a criterio del agente para que el producto final se vea espectacular e impresionante.
+- **Estructuras de Materiales Modernos:** Uso de Glassmorphism elegante (`backdrop-filter: blur`), sombras tridimensionales suaves y bordes ultra finos con iluminación sutil.
+- **Microinteracciones Dinámicas:** Efectos interactivos fluidos y animaciones (desplazamientos 3D de tarjetas, botones holográficos, y transiciones elásticas) al pasar el cursor o hacer clic.
 
 ## 5. TESTING Y CALIDAD
 - **TDD (Test Driven Development) Recomendado:** Escribir el test antes que la funcionalidad.
