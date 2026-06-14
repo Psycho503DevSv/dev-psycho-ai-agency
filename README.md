@@ -277,8 +277,8 @@ python tools/health-check.py
 
 ### 5. Correr las pruebas unitarias
 ```bash
-python -m unittest tests/runtime/test_agent_loader.py
-python -m unittest tests/runtime/test_graphiti_memory.py
+# Ejecutar todas las pruebas con pytest
+pytest
 ```
 
 ---
