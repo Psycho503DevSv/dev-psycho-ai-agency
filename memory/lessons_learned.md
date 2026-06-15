@@ -44,3 +44,12 @@
 * Revisa la lista de errores de QualityGate antes de considerar el workflow como finalizado.
 * Verifica que todos los archivos obligatorios estén presentes antes de ejecutar el Workflow wf-qg.
 * Verifica la presencia de archivos obligatorios (README.md y requirements.txt) en el workflow.
+* Asegúrate de que el workflow (wf-qg) esté configurado correctamente para detectar archivos faltantes.
+* Revisa la documentación del workflow para entender qué archivos y configuraciones son requeridas para su ejecución.
+* Verificar la presencia de archivos obligatorios (README.md, requirements.txt) antes de iniciar el workflow.
+* Implementar validaciones de calidad para detectar archivos faltantes en el código.
+* Revisar la configuración del QualityGate para asegurarse de que esté chequeando los archivos obligatorios.
+* Verifica la existencia de archivos obligatorios (README.md, requirements.txt) en el proyecto antes de iniciar el workflow.
+* Verifica la presencia de archivos obligatorios (README.md, requirements.txt) antes de iniciar el workflow.
+* Asegúrate de que los archivos requeridos estén actualizados y no faltantes.
+* Revisa la configuración del workflow para asegurarte de que se estén evaluando los archivos correctos.

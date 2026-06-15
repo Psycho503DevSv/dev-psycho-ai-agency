@@ -1,9 +1,18 @@
 import os
+import re
 import subprocess
 import logging
 from typing import Dict, Any
 
 logger = logging.getLogger("McpExecutor")
+
+# ── Docker sandbox detection ──────────────────────────────────────────────────
+# Cuando AGENT_ENV=docker el proceso ya corre dentro del contenedor.
+# Cuando corre local y USE_DOCKER_SANDBOX=true intentamos usar `docker exec`
+# para aislar comandos de terminal en el contenedor del agente.
+_AGENT_ENV        = os.environ.get("AGENT_ENV", "local")
+_USE_DOCKER_SB    = os.environ.get("USE_DOCKER_SANDBOX", "false").lower() == "true"
+_DOCKER_CONTAINER = os.environ.get("AGENT_CONTAINER_NAME", "psycho503_agent")
 
 class McpExecutor:
     def __init__(self, base_dir: str = None):
@@ -144,51 +153,111 @@ class McpExecutor:
 
     # --- Herramientas de Comandos / Terminal ---
 
+    # ── Guardrails compartidos ────────────────────────────────────────────────
+    _DANGEROUS_PATTERNS = [
+        r"\brm\s+-rf\b",                                    # rm -rf
+        r"\brmdir\s+/s\b",                                  # rmdir /s
+        r"\bdel\s+/s\b",                                    # del /s
+        r"\bdel\s+/q\b",                                    # del /q
+        r"\bformat\b",                                      # format disk
+        r"\bmkfs\b",                                        # mkfs
+        r"\bshutdown\b",                                    # shutdown
+        r"\breboot\b",                                      # reboot
+        r"\bpoweroff\b",                                    # poweroff
+        r"\binit\s+0\b",                                    # init 0
+        r":\(\)\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",          # Fork bomb
+        r">\s*/dev/sda\b",                                  # Raw write to sda
+        r">\s*/dev/nvme",                                   # Raw write to nvme
+        r"\|\s*sh\b",                                       # Piping to shell
+        r"\|\s*bash\b",                                     # Piping to bash
+        r"\|\s*iex\b",                                      # PowerShell IEX
+        r"\binvoke-expression\b",                           # raw IEX
+    ]
+
+    def _check_guardrails(self, command: str) -> bool:
+        """Retorna True si el comando pasa los guardrails (es seguro)."""
+        cmd_lower = command.lower()
+        for pattern in self._DANGEROUS_PATTERNS:
+            if re.search(pattern, cmd_lower):
+                self._log_security_violation(
+                    "Comando bloqueado",
+                    f"Comando detectado como peligroso: {command}"
+                )
+                return False
+        return True
+
+    def _run_in_docker_sandbox(self, command: str, cwd: str, timeout: int = 60) -> Dict[str, Any]:
+        """Ejecuta `command` dentro del contenedor Docker del agente via `docker exec`."""
+        logger.info(f"[SANDBOX-DOCKER] Ejecutando en contenedor '{_DOCKER_CONTAINER}': {command}")
+        docker_cmd = [
+            "docker", "exec",
+            "--workdir", "/workspace",
+            _DOCKER_CONTAINER,
+            "bash", "-c", command
+        ]
+        try:
+            result = subprocess.run(
+                docker_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout
+            )
+            return {
+                "status": "SUCCESS" if result.returncode == 0 else "FAIL",
+                "return_code": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "sandbox": "docker"
+            }
+        except FileNotFoundError:
+            return {
+                "status": "FAIL",
+                "error": "Docker no encontrado. Instala Docker Desktop o activa el daemon.",
+                "sandbox": "docker"
+            }
+        except subprocess.TimeoutExpired as te:
+            return {
+                "status": "FAIL",
+                "error": "Timeout en sandbox Docker (60s).",
+                "stdout": te.stdout or "",
+                "stderr": te.stderr or "",
+                "sandbox": "docker"
+            }
+
     def _tool_run_command(self, args: Dict[str, Any]) -> Dict[str, Any]:
         command = args.get("command", "")
         cwd = args.get("cwd", ".")
-        resolved_cwd = self._resolve_path(cwd)
+        timeout = int(args.get("timeout", 60))
 
         if not command:
             return {"status": "FAIL", "error": "Comando vacío"}
 
-        # Filtro de Command Guardrails
-        cmd_lower = command.lower()
-        
-        # Patrones destructivos o muy peligrosos
-        dangerous_patterns = [
-            r"\brm\s+-rf\b",        # rm -rf
-            r"\brmdir\s+/s\b",      # rmdir /s
-            r"\bdel\s+/s\b",        # del /s
-            r"\bdel\s+/q\b",        # del /q
-            r"\bformat\b",          # format disk
-            r"\bmkfs\b",            # mkfs
-            r"\bshutdown\b",        # shutdown
-            r"\breboot\b",          # reboot
-            r"\bpoweroff\b",        # poweroff
-            r"\binit\s+0\b",        # init 0
-            r":\(\)\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", # Fork bomb
-            r">\s*/dev/sda\b",      # Raw write to sda
-            r">\s*/dev/nvme",       # Raw write to nvme
-            r"\|\s*sh\b",           # Piping to shell (curl ... | sh)
-            r"\|\s*bash\b",         # Piping to bash
-            r"\|\s*iex\b",          # Piping to Invoke-Expression (PowerShell)
-            r"\binvoke-expression\b" # raw Invoke-Expression
-        ]
-        
-        import re
-        for pattern in dangerous_patterns:
-            if re.search(pattern, cmd_lower):
-                self._log_security_violation("Comando bloqueado", f"Comando detectado como peligroso: {command}")
-                return {
-                    "status": "FAIL",
-                    "error": "Acceso denegado: Comando bloqueado por políticas de seguridad del sistema."
-                }
+        # ── Guardrails de seguridad ────────────────────────────────────────── #
+        if not self._check_guardrails(command):
+            return {
+                "status": "FAIL",
+                "error": "Acceso denegado: Comando bloqueado por políticas de seguridad del sistema."
+            }
 
-        logger.info(f"Ejecutando comando en terminal autónomo: '{command}' en '{resolved_cwd}'")
-        
+        # ── Routing: Docker sandbox vs. local ─────────────────────────────── #
+        # Caso 1: Corriendo en entorno local CON sandbox Docker habilitado
+        if _AGENT_ENV == "local" and _USE_DOCKER_SB:
+            logger.info(f"[SANDBOX] Redirigiendo comando al contenedor Docker '{_DOCKER_CONTAINER}'")
+            return self._run_in_docker_sandbox(command, cwd, timeout)
+
+        # Caso 2: Ya corremos dentro del contenedor Docker (auto-sandbox)
+        if _AGENT_ENV == "docker":
+            logger.info(f"[SANDBOX-DOCKER] El proceso ya está en el contenedor. Ejecutando localmente.")
+            # El CWD dentro del contenedor es /workspace
+            resolved_cwd = "/workspace"
+        else:
+            # Caso 3: Modo local puro, resolución de paths normal
+            resolved_cwd = self._resolve_path(cwd)
+
+        logger.info(f"Ejecutando comando: '{command}' en '{resolved_cwd}'")
+
         try:
-            # Ejecutar con shell=True de forma segura
             result = subprocess.run(
                 command,
                 cwd=resolved_cwd,
@@ -196,18 +265,19 @@ class McpExecutor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=60
+                timeout=timeout
             )
             return {
                 "status": "SUCCESS" if result.returncode == 0 else "FAIL",
                 "return_code": result.returncode,
                 "stdout": result.stdout,
-                "stderr": result.stderr
+                "stderr": result.stderr,
+                "sandbox": _AGENT_ENV
             }
         except subprocess.TimeoutExpired as te:
             return {
                 "status": "FAIL",
-                "error": "El comando excedió el tiempo límite de ejecución de 60 segundos.",
+                "error": f"El comando excedió el tiempo límite de {timeout} segundos.",
                 "stdout": te.stdout or "",
                 "stderr": te.stderr or ""
             }
