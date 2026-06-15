@@ -78,5 +78,10 @@ Ejecuta un comando en la terminal local del sistema operativo de manera síncron
 * **Retorno:** `{"status": "SUCCESS/FAIL", "return_code": int, "stdout": "...", "stderr": "..."}`
 * **Límite de tiempo:** 60 segundos por comando.
 
+### `ask_user`
+Detiene la ejecución del agente temporalmente en consola para realizar una pregunta interactiva al usuario y esperar su respuesta.
+* **Argumentos:** `{"question": "Texto de la pregunta"}`
+* **Retorno:** `{"status": "SUCCESS", "response": "... respuesta escrita por el usuario ..."}`
+
 ---
 *Actualizado por: MCP-Architect | Fecha: 2026-06-15*

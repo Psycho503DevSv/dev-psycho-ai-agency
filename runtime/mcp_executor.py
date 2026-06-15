@@ -104,3 +104,20 @@ class McpExecutor:
             }
         except Exception as e:
             return {"status": "FAIL", "error": f"Fallo en ejecución: {str(e)}"}
+
+    # --- Herramientas de Interacción Humana ---
+
+    def _tool_ask_user(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        question = args.get("question", "")
+        if not question:
+            return {"status": "FAIL", "error": "La pregunta no puede estar vacía."}
+            
+        print("\n" + "="*50)
+        print(f"💬 PREGUNTA DEL AGENTE:\n{question}")
+        print("="*50)
+        
+        try:
+            user_response = input("Respuesta > ")
+            return {"status": "SUCCESS", "response": user_response}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Error leyendo respuesta del usuario: {str(e)}"}

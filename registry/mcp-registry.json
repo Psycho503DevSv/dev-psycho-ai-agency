@@ -136,6 +136,25 @@
         "browser-automation",
         "testing"
       ]
+    },
+    {
+      "id": "human-interaction",
+      "type": "custom",
+      "status": "OPERATIONAL",
+      "transport": "stdio",
+      "capabilities": [
+        "ask_user"
+      ],
+      "authorized_agents": [
+        {
+          "agent_id": "psycho-ceo",
+          "permissions": ["full"]
+        },
+        {
+          "agent_id": "product-manager",
+          "permissions": ["full"]
+        }
+      ]
     }
   ]
 }
