@@ -16,3 +16,12 @@
 * Verifica la existencia de archivos obligatorios como README.md y requirements.txt antes de iniciar el workflow.
 * Asegúrate de que los archivos requeridos estén en el directorio correcto y no estén omitidos.
 * Revisa la configuración del workflow para asegurarte de que esté incluyendo la validación de archivos obligatorios.
+* Verifica la existencia de archivos obligatorios (README.md y requirements.txt) antes de iniciar el flujo de trabajo.
+* Asegúrate de que los archivos obligatorios estén en el directorio correcto y no estén omitidos en el flujo de trabajo.
+* Revisa la configuración de calidad del flujo de trabajo (wf-qg) para asegurarte de que esté incluyendo la validación de archivos obligatorios.
+* Verificar la presencia de archivos obligatorios (README.md, requirements.txt) en el proyecto.
+* Implementar validaciones de calidad para detectar faltantes de archivos importantes.
+* Revisar y actualizar el workflow (wf-qg) para incluir comprobaciones de archivos necesarios.
+* Verifica la presencia de archivos obligatorios (README.md, requirements.txt) en el proyecto.
+* Implementa un validador de calidad que busque archivos faltantes en el proyecto.
+* Documenta los archivos obligatorios en el proyecto para evitar confusiones en el futuro.

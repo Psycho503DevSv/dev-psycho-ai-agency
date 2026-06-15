@@ -253,21 +253,38 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Ejecutar un workflow
+### 3. Configurar Claves de API (.env)
+
+Para que el bucle de agentes funcione de manera autónoma y real (utilizando modelos de lenguaje reales), debes configurar un archivo `.env` en la raíz del proyecto. El sistema soporta dos modos de ejecución:
+
+* **Modo Real (NVIDIA NIM o OpenAI):** Si configuras una clave en el archivo `.env`, los agentes realizarán llamadas de razonamiento y uso de herramientas reales en cada paso.
+* **Modo Simulación:** Si no configuras ninguna clave de API, el sistema correrá los pasos en modo simulación de manera gratuita sin consumir créditos ni tokens.
+
+Crea un archivo `.env` con la siguiente estructura:
+```env
+# Clave del API gratuita de NVIDIA NIM (Recomendada y prioritaria si se define)
+# Consíguela gratis en: https://build.nvidia.com/
+NVIDIA_API_KEY=nvapi-tu_clave_aquí
+
+# Clave de OpenAI (Opcional, de compatibilidad)
+OPENAI_API_KEY=
+```
+
+### 4. Ejecutar un workflow
 ```bash
-python runtime/workflow_runner.py [workflow_id] [nombre_proyecto]
+python -m runtime.workflow_runner [workflow_id] [nombre_proyecto]
 ```
 
 **Ejemplos:**
 ```bash
 # Descubrir requisitos de un nuevo proyecto
-python runtime/workflow_runner.py wf-discovery mi-app-web
+python -m runtime.workflow_runner wf-discovery mi-app-web
 
 # Construir un proyecto completo desde cero
-python runtime/workflow_runner.py wf-build-project mi-saas-app
+python -m runtime.workflow_runner wf-build-project mi-saas-app
 
 # Revisar y validar el código de un proyecto
-python runtime/workflow_runner.py wf-review mi-app-web
+python -m runtime.workflow_runner wf-review mi-app-web
 ```
 
 ### 4. Verificar la salud del sistema
