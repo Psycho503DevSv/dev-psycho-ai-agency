@@ -53,6 +53,18 @@ El runner captura el bloque JSON, lo valida, lo ejecuta a través de `McpExecuto
 }
 ```
 
+### 2.1 Robustez del Agent Loop (v1.2.0+)
+
+El runtime aplica las siguientes salvaguardas automáticas en cada turno del agente:
+
+| Salvaguarda | Comportamiento |
+| :--- | :--- |
+| **Reintentos de LLM** | La llamada al LLM se reintenta hasta 3 veces con backoff exponencial (2s → 4s → 8s) ante errores de red o rate-limits. |
+| **Parser Auto-Correctivo** | `_parse_tool_call` detecta JSON en bloques ` ```json `, ` ``` ` sin etiqueta o JSON crudo. Aplica 4 correcciones automáticas de errores sintácticos comunes de LLMs. |
+| **Corrección de JSON Inválido** | Si el agente intenta llamar a una herramienta con JSON malformado, el runner le devuelve un mensaje de error descriptivo para que lo reformatee, sin romper el bucle. |
+| **Anti-repetición de respuestas** | Si el agente emite dos respuestas consecutivas idénticas, el bucle se corta inmediatamente. |
+| **Anti-repetición de herramientas** | Si el agente llama a la misma herramienta con los mismos argumentos 3+ veces, el bucle se aborta con log de error crítico para evitar consumo infinito de tokens. |
+
 ## 3. Catálogo de Herramientas MCP Locales
 
 El módulo `runtime/mcp_executor.py` implementa el soporte local nativo para las siguientes herramientas:

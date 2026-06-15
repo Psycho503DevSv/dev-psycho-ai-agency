@@ -2,6 +2,15 @@
 
 Todos los cambios notables realizados en el framework PsychoSv_503 AI DevOS están documentados en este archivo.
 
+## [1.2.0] - 2026-06-15
+
+### Añadido (Fase 1: Estabilidad y Robustez)
+* **Reintentos con Backoff Exponencial (`_call_llm`):** Las llamadas al LLM se reintentan automáticamente hasta 3 veces con backoff exponencial (2s, 4s, 8s) ante errores de red o rate-limits. Nunca más caídas silenciosas.
+* **Parser JSON Auto-Correctivo (`_parse_tool_call`):** Nuevo método dedicado al parseo de tool calls. Soporta bloques ` ```json ```, ` ``` ` sin etiqueta y JSON crudo. Aplica 4 correcciones automáticas cuando el LLM alucina comillas simples, comas sobrantes o booleanos de Python.
+* **Detección de Bucles de Alucinación:** Si un agente repite la misma respuesta dos veces consecutivas se corta el bucle inmediatamente. Si invoca la misma herramienta con los mismos argumentos 3+ veces se aborta con log de error.
+* **Autocorrección de JSON Inválido en Tiempo Real:** Cuando el agente intenta invocar una herramienta pero el JSON no es válido, el runner devuelve un mensaje de error correctivo al LLM para que lo reformatee, sin desperdiciar turnos ni tokens.
+* **Mocks de LLM en Testing (`tests/test_kernel.py`):** Todas las llamadas reales al LLM en `test_workflow_runner` y `test_workflow_runner_edge_cases` ahora están mockeadas con `unittest.mock.patch`. El tiempo de ejecución de la suite cayó de **2m 15s → 9.36 segundos** sin necesidad de API keys ni internet.
+
 ## [1.1.0] - 2026-06-15
 
 ### Añadido
