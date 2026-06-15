@@ -155,6 +155,40 @@
           "permissions": ["full"]
         }
       ]
+    },
+    {
+      "id": "preview",
+      "type": "custom",
+      "status": "OPERATIONAL",
+      "transport": "native",
+      "capabilities": [
+        "preview_project"
+      ],
+      "supported_project_types": [
+        "web-estatica",
+        "web-framework",
+        "android-apk",
+        "chrome-extension",
+        "kinetic-typography"
+      ],
+      "authorized_agents": [
+        {
+          "agent_id": "psycho-ceo",
+          "permissions": ["full"]
+        },
+        {
+          "agent_id": "frontend",
+          "permissions": ["full"]
+        },
+        {
+          "agent_id": "devops",
+          "permissions": ["full"]
+        },
+        {
+          "agent_id": "agent-evaluator",
+          "permissions": ["read"]
+        }
+      ]
     }
   ]
 }

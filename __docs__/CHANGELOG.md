@@ -2,6 +2,16 @@
 
 Todos los cambios notables realizados en el framework PsychoSv_503 AI DevOS están documentados en este archivo.
 
+## [1.1.0] - 2026-06-15
+
+### Añadido
+* **Registro de Tipos de Proyecto Nativos (`registry/project-types-registry.json`):** Registro con especificaciones de 5 tipos de proyecto soportados por la agencia (`web-estatica`, `web-framework`, `android-apk`, `chrome-extension`, `kinetic-typography`) detallando sus herramientas de construcción, servidores de desarrollo, estrategias de previsualización y agentes asignados.
+* **Herramienta de Previsualización Nativa MCP (`preview_project`):** Implementada en `runtime/mcp_executor.py` para permitir la apertura automática de servidores locales HTTP, servidores de desarrollo en background, instalación/reemplazo de APKs sin duplicados (`adb install -r`), y la apertura de Chrome con extensiones cargadas.
+* **Pruebas de Previsualización:** Agregados casos de prueba a la suite de tests en `tests/runtime/test_mcp_executor.py` cubriendo tipos de proyecto soportados y manejo de errores.
+
+### Modificado
+* **Instrucciones de CEO (`agents/psycho-ceo/instructions.md`):** Modificadas para exigir preguntar primero por el tipo de proyecto en la entrevista inicial y para previsualizar el código después de cada bloque funcional.
+
 ## [1.0.0] - 2026-06-15
 
 ### Añadido

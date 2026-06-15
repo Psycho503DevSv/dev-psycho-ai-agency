@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "descripcion": "Registro de tipos de proyecto soportados nativamente por la agencia PsychoSv_503 AI DevOS.",
+  "project_types": [
+    {
+      "id": "web-estatica",
+      "nombre": "Web Estática (HTML/CSS/JS puro)",
+      "descripcion": "Sitios y animaciones construidas con HTML, CSS y JavaScript puro sin framework. Incluye salpicaderas de tipografía cinética, landing pages y prototipos visuales.",
+      "herramienta_build": null,
+      "herramienta_dev": "python -m http.server 8080",
+      "herramienta_preview": "open_browser",
+      "puerto_default": 8080,
+      "archivos_requeridos": ["index.html"],
+      "agentes_principales": ["frontend"]
+    },
+    {
+      "id": "web-framework",
+      "nombre": "Aplicación Web con Framework (React/Vue/Vite)",
+      "descripcion": "Aplicaciones web modernas usando frameworks de JavaScript como React, Vue o Vite. Incluye SPAs, dashboards y PWAs.",
+      "herramienta_build": "npm run build",
+      "herramienta_dev": "npm run dev",
+      "herramienta_preview": "open_browser",
+      "puerto_default": 5173,
+      "archivos_requeridos": ["index.html", "package.json"],
+      "agentes_principales": ["frontend", "backend"]
+    },
+    {
+      "id": "android-apk",
+      "nombre": "Aplicación Android (APK)",
+      "descripcion": "Aplicaciones nativas o híbridas para dispositivos Android. Se construyen con Gradle y se despliegan directamente en emuladores o dispositivos físicos vía ADB sin instalar múltiples versiones.",
+      "herramienta_build": "gradle assembleDebug",
+      "herramienta_dev": "adb install -r app/build/outputs/apk/debug/app-debug.apk",
+      "herramienta_preview": "adb_launch",
+      "puerto_default": null,
+      "archivos_requeridos": ["build.gradle", "app/src/main/AndroidManifest.xml"],
+      "nota": "El flag -r reemplaza la instalacion existente sin duplicar versiones.",
+      "agentes_principales": ["frontend", "backend", "devops"]
+    },
+    {
+      "id": "chrome-extension",
+      "nombre": "Extensión de Chrome / Chromium",
+      "descripcion": "Extensiones del navegador Chrome o Chromium. Se cargan directamente sin necesidad de empaquetar durante el desarrollo.",
+      "herramienta_build": null,
+      "herramienta_dev": "load_chrome_extension",
+      "herramienta_preview": "open_browser_extension",
+      "puerto_default": null,
+      "archivos_requeridos": ["manifest.json"],
+      "agentes_principales": ["frontend"]
+    },
+    {
+      "id": "kinetic-typography",
+      "nombre": "Splash / Tipografía Cinética",
+      "descripcion": "Animaciones de tipografía cinética, salpicaderas visuales y experiencias de entrada interactivas. Construidas con HTML5 Canvas, CSS animations, GSAP, Three.js o Lottie.",
+      "herramienta_build": null,
+      "herramienta_dev": "python -m http.server 8080",
+      "herramienta_preview": "open_browser",
+      "puerto_default": 8080,
+      "archivos_requeridos": ["index.html"],
+      "librerias_recomendadas": ["gsap", "three.js", "anime.js", "lottie-web"],
+      "agentes_principales": ["frontend"]
+    }
+  ]
+}

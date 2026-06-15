@@ -83,5 +83,15 @@ Detiene la ejecución del agente temporalmente en consola para realizar una preg
 * **Argumentos:** `{"question": "Texto de la pregunta"}`
 * **Retorno:** `{"status": "SUCCESS", "response": "... respuesta escrita por el usuario ..."}`
 
+### `preview_project`
+Lanza la previsualización nativa del proyecto según su tipo (web-estatica, kinetic-typography, web-framework, android-apk, chrome-extension).
+* **Argumentos:**
+  * `project_type` (string, obligatorio): El tipo de proyecto (`web-estatica`, `web-framework`, `android-apk`, `chrome-extension`, `kinetic-typography`).
+  * `project_path` (string, opcional): Ruta base del proyecto. Por defecto es `"."`.
+  * `port` (int, opcional): Puerto para servidores locales HTTP o dev servers.
+  * `apk_path` (string, opcional): Ruta del archivo APK (requerido para `android-apk`).
+  * `package_name` (string, opcional): Nombre del paquete Android (requerido para `android-apk`).
+* **Retorno:** `{"status": "SUCCESS/FAIL", "message": "mensaje descriptivo", "project_type": "...", ...}`
+
 ---
 *Actualizado por: MCP-Architect | Fecha: 2026-06-15*

@@ -28,3 +28,14 @@
 * Verifica la existencia de archivos obligatorios (README.md y requirements.txt) antes de iniciar el workflow.
 * Asegúrate de que los archivos mencionados en el error estén en el directorio correcto y no estén omitidos en el código.
 * Revisa la configuración del QualityGate para asegurarte de que los archivos obligatorios estén incluidos en la lista de verificación.
+* Verifica la presencia de archivos obligatorios (README.md, requirements.txt) en el workflow.
+* Asegúrate de que el archivo README.md esté presente en el repositorio.
+* Revisa la configuración del workflow para asegurarte de que se estén revisando los archivos requeridos.
+* Asegúrate de incluir un archivo README.md en el proyecto.
+* Verifica la existencia de un archivo requirements.txt en el proyecto.
+* Revisa la configuración del Workflow para asegurarte de que esté completo y correcto.
+* Verifica la existencia de archivos obligatorios (README.md, requirements.txt) en el proyecto antes de iniciar la validación.
+* Asegúrate de que los archivos obligatorios estén actualizados y no estén faltando en el repositorio.
+* Revisa la configuración del Workflow (wf-qg) para asegurarte de que incluya la validación de los archivos obligatorios.
+* No olvides agregar un archivo requirements.txt con las dependencias necesarias.
+* Verifica que todos los archivos requeridos estén presentes en el proyecto.
