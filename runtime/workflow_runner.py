@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from config import settings
 
 # Intentamos importar componentes del runtime
@@ -42,7 +42,7 @@ class WorkflowRunner:
             self.workflows = {wf["id"]: wf for wf in json.load(f).get("workflows", [])}
 
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """Realiza una llamada HTTP directa a NVIDIA NIM o OpenAI."""
+        """Realiza una llamada HTTP directa a NVIDIA NIM o OpenAI con reintentos y timeouts."""
         nvidia_key = getattr(settings, "NVIDIA_API_KEY", "")
         openai_key = getattr(settings, "OPENAI_API_KEY", "")
 
@@ -67,9 +67,68 @@ class WorkflowRunner:
             "temperature": 0.2
         }
 
-        response = requests.post(api_url, headers=headers, json=payload, timeout=45)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        # Implementación de reintentos con Backoff Exponencial
+        import time
+        max_retries = 3
+        backoff = 2.0
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(api_url, headers=headers, json=payload, timeout=45)
+                response.raise_for_status()
+                return response.json()["choices"][0]["message"]["content"]
+            except (requests.RequestException, ValueError) as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"Fallo definitivo de conexión a LLM tras {max_retries} intentos: {str(e)}")
+                    raise e
+                sleep_time = backoff ** (attempt + 1)
+                logger.warning(f"Error llamando al LLM (intento {attempt + 1}/{max_retries}): {str(e)}. Reintentando en {sleep_time}s...")
+                time.sleep(sleep_time)
+
+    def _parse_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
+        """Intenta extraer y parsear un bloque JSON de llamada a herramienta, aplicando auto-corrección."""
+        import re
+        
+        # 1. Intentar buscar bloques delimitados por ```json o ```
+        json_str = None
+        for pattern in [r"```json\s*(\{.*?\})\s*```", r"```\s*(\{.*?\})\s*```"]:
+            match = re.search(pattern, response, re.DOTALL)
+            if match:
+                json_str = match.group(1).strip()
+                break
+                
+        # 2. Si no hay delimitadores, buscar el primer '{' y el último '}'
+        if not json_str:
+            match = re.search(r"(\{.*\})", response, re.DOTALL)
+            if match:
+                json_str = match.group(1).strip()
+                
+        if not json_str:
+            return None
+            
+        # 3. Intentar parsear el JSON original
+        try:
+            return json.loads(json_str)
+        except Exception:
+            pass
+            
+        # 4. Auto-corrección de errores sintácticos comunes de LLMs
+        try:
+            cleaned = json_str
+            # Comillas simples en llaves: 'key': -> "key":
+            cleaned = re.sub(r"'([a-zA-Z0-9_-]+)'\s*:", r'"\1":', cleaned)
+            # Comillas simples en valores: : 'value' -> : "value"
+            cleaned = re.sub(r":\s*'([^']*)'", r': "\1"', cleaned)
+            # Quitar comas sobrantes antes de cierres
+            cleaned = re.sub(r",\s*\}", "}", cleaned)
+            cleaned = re.sub(r",\s*\]", "]", cleaned)
+            # Booleanos/Nulos de Python
+            cleaned = cleaned.replace("True", "true").replace("False", "false").replace("None", "null")
+            
+            return json.loads(cleaned)
+        except Exception as e:
+            logger.warning(f"Fallo en parseo y auto-corrección de JSON de herramienta: {str(e)}")
+            return None
 
     def _run_agent_loop(self, agent_id: str, context: Dict[str, Any], project_name: str, workflow_id: str) -> str:
         """Ejecuta un bucle interactivo de agente (Agent Loop) con el LLM y herramientas MCP."""
@@ -101,6 +160,8 @@ class WorkflowRunner:
         logger.info(f"Iniciando Agent Loop Real para el agente: {agent_id}")
         
         last_response = ""
+        previous_tool_calls = []
+        
         for turn in range(5): # Máximo 5 turnos para prevenir bucles infinitos
             logger.info(f"Bucle de Agente {agent_id} - Turno {turn + 1}/5")
             try:
@@ -109,23 +170,45 @@ class WorkflowRunner:
                 logger.error(f"Error llamando al LLM en el turno {turn + 1}: {str(e)}")
                 break
 
+            # Prevenir repeticiones idénticas de respuesta (bucle de alucinación)
+            if response.strip() == last_response.strip():
+                logger.warning(f"Detección de respuesta repetitiva consecutiva del agente {agent_id}. Rompiendo bucle.")
+                break
+
             messages.append({"role": "assistant", "content": response})
             last_response = response
 
-            # Buscar llamadas a herramientas
-            tool_call = None
-            if "```json" in response:
-                try:
-                    start = response.find("```json") + 7
-                    end = response.find("```", start)
-                    json_str = response[start:end].strip()
-                    tool_call = json.loads(json_str)
-                except Exception as pe:
-                    logger.warning(f"Error parseando JSON de herramienta del agente: {str(pe)}")
+            # Buscar llamadas a herramientas usando el parseador robusto
+            tool_call = self._parse_tool_call(response)
+
+            # Si el agente intentó llamar una herramienta (tiene backticks o '{') pero falló el parseo, reportar al LLM para autocorrección
+            if not tool_call and ("```" in response or "{" in response) and "REPORT:" not in response:
+                error_msg = "ERROR: Se detectó un intento de llamada a herramienta pero el formato JSON es inválido. Por favor, asegúrate de responder ÚNICAMENTE con el bloque JSON válido encerrado en triple backticks ```json ... ```."
+                logger.warning(f"Agente {agent_id} produjo JSON inválido. Solicitando corrección.")
+                messages.append({"role": "user", "content": error_msg})
+                continue
 
             if tool_call and "tool" in tool_call:
                 tool_name = tool_call["tool"]
                 tool_args = tool_call.get("arguments", {})
+                
+                # Prevenir bucles de llamadas a la misma herramienta con mismos argumentos
+                call_signature = (tool_name, json.dumps(tool_args, sort_keys=True))
+                if call_signature in previous_tool_calls:
+                    logger.warning(f"Llamada duplicada consecutiva a herramienta '{tool_name}' con los mismos argumentos.")
+                    # Si ya se repitió más de 2 veces, forzar salida para evitar consumo infinito de tokens
+                    if previous_tool_calls.count(call_signature) >= 2:
+                        logger.error("Bucle de repetición severo detectado. Abortando loop de agente.")
+                        break
+                    
+                    messages.append({
+                        "role": "user",
+                        "content": f"ERROR: Estás intentando llamar consecutivamente a la herramienta '{tool_name}' con los mismos argumentos. Si la acción falló o no tiene cambios, finaliza con 'REPORT:' o cambia de parámetros/herramienta."
+                    })
+                    previous_tool_calls.append(call_signature)
+                    continue
+
+                previous_tool_calls.append(call_signature)
                 
                 # Ejecutar herramienta vía MCP Executor
                 result = self.mcp_executor.execute_tool(tool_name, tool_args)
