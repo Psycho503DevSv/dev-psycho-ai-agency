@@ -16,11 +16,30 @@ class McpExecutor:
         try:
             method = getattr(self, f"_tool_{tool_name.replace(':', '_')}", None)
             if not method:
-                return {"status": "FAIL", "error": f"Herramienta '{tool_name}' no soportada en el ejecutor local."}
-            return method(arguments)
+                res = {"status": "FAIL", "error": f"Herramienta '{tool_name}' no soportada en el ejecutor local."}
+            else:
+                res = method(arguments)
+                
+            # Loguear evento de herramienta al dashboard
+            try:
+                from runtime.dashboard import update_dashboard_state
+                update_dashboard_state({"recent_tool_calls": {"tool": tool_name, "args": arguments, "status": res.get("status", "SUCCESS")}})
+            except ImportError:
+                try:
+                    from dashboard import update_dashboard_state
+                    update_dashboard_state({"recent_tool_calls": {"tool": tool_name, "args": arguments, "status": res.get("status", "SUCCESS")}})
+                except Exception:
+                    pass
+            return res
         except Exception as e:
             logger.exception(f"Error ejecutando herramienta {tool_name}")
-            return {"status": "FAIL", "error": f"Excepción en herramienta: {str(e)}"}
+            res = {"status": "FAIL", "error": f"Excepción en herramienta: {str(e)}"}
+            try:
+                from runtime.dashboard import update_dashboard_state
+                update_dashboard_state({"recent_tool_calls": {"tool": tool_name, "args": arguments, "status": "FAIL"}})
+            except Exception:
+                pass
+            return res
 
     def _resolve_path(self, path: str) -> str:
         """Resuelve y valida que la ruta esté dentro del workspace base."""
@@ -46,6 +65,17 @@ class McpExecutor:
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(log_entry)
             logger.warning(f"Incidente de seguridad registrado: {reason} - {details}")
+            
+            # Enviar alerta en vivo al dashboard
+            try:
+                from runtime.dashboard import add_security_alert
+                add_security_alert(f"[{timestamp}] ALERTA: {reason} - {details}")
+            except ImportError:
+                try:
+                    from dashboard import add_security_alert
+                    add_security_alert(f"[{timestamp}] ALERTA: {reason} - {details}")
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"Error escribiendo en security_audit.log: {str(e)}")
 

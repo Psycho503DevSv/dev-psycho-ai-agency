@@ -76,7 +76,54 @@ class WorkflowRunner:
             try:
                 response = requests.post(api_url, headers=headers, json=payload, timeout=45)
                 response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"]
+                res_data = response.json()
+                
+                # Procesar y registrar uso de tokens
+                try:
+                    usage = res_data.get("usage", {})
+                    prompt_tokens = usage.get("prompt_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens", 0)
+                    
+                    # Estimar costo: gpt-4o-mini es $0.15/1M prompt, $0.60/1M completion. Llama-3.1-8b es similar o menor.
+                    # Usaremos una aproximación mixta de $0.15/1M y $0.60/1M para estimar.
+                    cost = (prompt_tokens * 0.00000015) + (completion_tokens * 0.00000060)
+                    
+                    # Intentar guardar localmente
+                    memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+                    os.makedirs(memory_dir, exist_ok=True)
+                    token_file = os.path.join(memory_dir, "token_usage.json")
+                    
+                    accumulated = {"input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0, "total_calls": 0}
+                    if os.path.exists(token_file):
+                        try:
+                            with open(token_file, 'r') as tf:
+                                accumulated = json.load(tf)
+                        except Exception:
+                            pass
+                            
+                    accumulated["input_tokens"] += prompt_tokens
+                    accumulated["output_tokens"] += completion_tokens
+                    accumulated["estimated_cost_usd"] += cost
+                    accumulated["total_calls"] += 1
+                    
+                    with open(token_file, 'w') as tf:
+                        json.dump(accumulated, tf)
+                        
+                    # Enviar actualización al dashboard en vivo
+                    try:
+                        from runtime.dashboard import update_dashboard_state
+                        update_dashboard_state({
+                            "input_tokens": accumulated["input_tokens"],
+                            "output_tokens": accumulated["output_tokens"],
+                            "estimated_cost_usd": accumulated["estimated_cost_usd"],
+                            "total_calls": accumulated["total_calls"]
+                        })
+                    except Exception:
+                        pass
+                except Exception as ex:
+                    logger.warning(f"No se pudo guardar métricas de uso de tokens: {str(ex)}")
+
+                return res_data["choices"][0]["message"]["content"]
             except (requests.RequestException, ValueError) as e:
                 if attempt == max_retries - 1:
                     logger.error(f"Fallo definitivo de conexión a LLM tras {max_retries} intentos: {str(e)}")
@@ -194,11 +241,74 @@ class WorkflowRunner:
                 
                 # Prevenir bucles de llamadas a la misma herramienta con mismos argumentos
                 call_signature = (tool_name, json.dumps(tool_args, sort_keys=True))
+        for turn in range(5): # Máximo 5 turnos para prevenir bucles infinitos
+            logger.info(f"Bucle de Agente {agent_id} - Turno {turn + 1}/5")
+            
+            # Notificar al dashboard en vivo
+            try:
+                from runtime.dashboard import update_dashboard_state, add_dashboard_log
+                update_dashboard_state({
+                    "status": "RUNNING",
+                    "active_agent": agent_id,
+                    "active_role": context.get("role", "Ninguno"),
+                    "project_name": project_name,
+                    "workflow_id": workflow_id
+                })
+                add_dashboard_log(f"[{agent_id}] Pensando... Turno {turn + 1}/5")
+            except Exception:
+                pass
+
+            try:
+                response = self._call_llm(messages)
+            except Exception as e:
+                logger.error(f"Error llamando al LLM en el turno {turn + 1}: {str(e)}")
+                try:
+                    add_dashboard_log(f"[{agent_id}] ERROR LLM: {str(e)}")
+                except Exception:
+                    pass
+                break
+
+            # Prevenir repeticiones idénticas de respuesta (bucle de alucinación)
+            if response.strip() == last_response.strip():
+                logger.warning(f"Detección de respuesta repetitiva consecutiva del agente {agent_id}. Rompiendo bucle.")
+                try:
+                    add_dashboard_log(f"[{agent_id}] Bucle detectado. Cancelando ejecucion.")
+                except Exception:
+                    pass
+                break
+
+            messages.append({"role": "assistant", "content": response})
+            last_response = response
+
+            # Buscar llamadas a herramientas usando el parseador robusto
+            tool_call = self._parse_tool_call(response)
+
+            # Si el agente intentó llamar una herramienta (tiene backticks o '{') pero falló el parseo, reportar al LLM para autocorrección
+            if not tool_call and ("```" in response or "{" in response) and "REPORT:" not in response:
+                error_msg = "ERROR: Se detectó un intento de llamada a herramienta pero el formato JSON es inválido. Por favor, asegúrate de responder ÚNICAMENTE con el bloque JSON válido encerrado en triple backticks ```json ... ```."
+                logger.warning(f"Agente {agent_id} produjo JSON inválido. Solicitando corrección.")
+                try:
+                    add_dashboard_log(f"[{agent_id}] Alucinación JSON de herramienta. Solicitando autocorrección.")
+                except Exception:
+                    pass
+                messages.append({"role": "user", "content": error_msg})
+                continue
+
+            if tool_call and "tool" in tool_call:
+                tool_name = tool_call["tool"]
+                tool_args = tool_call.get("arguments", {})
+                
+                # Prevenir bucles de llamadas a la misma herramienta con mismos argumentos
+                call_signature = (tool_name, json.dumps(tool_args, sort_keys=True))
                 if call_signature in previous_tool_calls:
                     logger.warning(f"Llamada duplicada consecutiva a herramienta '{tool_name}' con los mismos argumentos.")
                     # Si ya se repitió más de 2 veces, forzar salida para evitar consumo infinito de tokens
                     if previous_tool_calls.count(call_signature) >= 2:
                         logger.error("Bucle de repetición severo detectado. Abortando loop de agente.")
+                        try:
+                            add_dashboard_log(f"[{agent_id}] Bucle de herramientas detectado. Abortando.")
+                        except Exception:
+                            pass
                         break
                     
                     messages.append({
@@ -211,8 +321,16 @@ class WorkflowRunner:
                 previous_tool_calls.append(call_signature)
                 
                 # Ejecutar herramienta vía MCP Executor
+                try:
+                    add_dashboard_log(f"[{agent_id}] Ejecutando herramienta {tool_name} con args: {json.dumps(tool_args)}")
+                except Exception:
+                    pass
                 result = self.mcp_executor.execute_tool(tool_name, tool_args)
                 logger.info(f"Resultado de herramienta {tool_name}: {result['status']}")
+                try:
+                    add_dashboard_log(f"[{agent_id}] Resultado {tool_name}: {result['status']}")
+                except Exception:
+                    pass
                 
                 messages.append({
                     "role": "user",
@@ -220,6 +338,11 @@ class WorkflowRunner:
                 })
             else:
                 if "REPORT:" in response or turn == 4:
+                    if "REPORT:" in response:
+                        try:
+                            add_dashboard_log(f"[{agent_id}] REPORT: {response.split('REPORT:')[1][:100]}...")
+                        except Exception:
+                            pass
                     break
 
         return last_response
@@ -229,10 +352,28 @@ class WorkflowRunner:
         self.status = "RUNNING"
         logger.info(f"STATUS CHANGE: {self.status} - Iniciando ejecución de workflow: {workflow_id} para proyecto: {project_name}")
         
+        # Iniciar servidor de dashboard en background de forma automática si no está ya arriba
+        try:
+            from runtime.dashboard import start_dashboard_server, update_dashboard_state, add_dashboard_log
+            start_dashboard_server()
+            update_dashboard_state({
+                "status": "RUNNING",
+                "project_name": project_name,
+                "workflow_id": workflow_id
+            })
+            add_dashboard_log(f"Iniciando workflow: {workflow_id} para {project_name}")
+        except Exception as e:
+            logger.warning(f"No se pudo iniciar el dashboard server: {str(e)}")
+
         wf = self.workflows.get(workflow_id)
         if not wf:
             self.status = "FAILED"
             logger.error(f"STATUS CHANGE: {self.status} - Workflow no encontrado: {workflow_id}")
+            try:
+                update_dashboard_state({"status": "FAILED"})
+                add_dashboard_log(f"Fallo: Workflow {workflow_id} no encontrado.")
+            except Exception:
+                pass
             return {"status": "FAIL", "error": "Workflow no encontrado"}
  
         # Validamos agentes
@@ -241,6 +382,11 @@ class WorkflowRunner:
         except Exception as e:
             self.status = "FAILED"
             logger.exception(f"STATUS CHANGE: {self.status} - Error cargando agentes: {str(e)}")
+            try:
+                update_dashboard_state({"status": "FAILED"})
+                add_dashboard_log(f"Fallo cargando agentes: {str(e)}")
+            except Exception:
+                pass
             return {"status": "FAIL", "error": f"Error cargando agentes: {str(e)}"}
 
         steps_execution = []
@@ -251,6 +397,11 @@ class WorkflowRunner:
                 logger.error(error_msg)
                 self.status = "FAILED"
                 logger.info(f"STATUS CHANGE: {self.status} - Paso fallido. Ejecución interrumpida.")
+                try:
+                    update_dashboard_state({"status": "FAILED"})
+                    add_dashboard_log(f"Fallo: Agente {agent_id} no disponible.")
+                except Exception:
+                    pass
                 return {"status": "FAIL", "error": error_msg, "completed_steps": steps_execution}
             
             try:
@@ -265,6 +416,10 @@ class WorkflowRunner:
                     agent_output = self._run_agent_loop(agent_id, context, project_name, workflow_id)
                 else:
                     logger.warning("Corriendo en MODO SIMULACIÓN: No se configuraron claves de API en el archivo .env.")
+                    try:
+                        add_dashboard_log(f"[{agent_id}] MODO SIMULACIÓN: Ejecución simulada.")
+                    except Exception:
+                        pass
                     agent_output = f"SIMULATED REPORT for {agent_id}"
 
                 # Registrar en memoria
@@ -280,6 +435,11 @@ class WorkflowRunner:
                 logger.error(f"Error ejecutando paso {agent_id}: {str(e)}")
                 self.status = "FAILED"
                 logger.info(f"STATUS CHANGE: {self.status} - Excepción en paso {agent_id}. Ejecución interrumpida.")
+                try:
+                    update_dashboard_state({"status": "FAILED"})
+                    add_dashboard_log(f"Fallo en paso {agent_id}: {str(e)}")
+                except Exception:
+                    pass
                 return {"status": "FAIL", "error": str(e), "completed_steps": steps_execution}
 
         # Quality Gate Integrado si es implementación o evaluación
@@ -287,6 +447,10 @@ class WorkflowRunner:
         if "agent-evaluator" in steps_execution or "backend" in steps_execution:
             project_path = os.path.join(self.projects_dir, project_name)
             logger.info(f"Iniciando Quality Gate para {project_path}...")
+            try:
+                add_dashboard_log("Ejecutando control de calidad QualityGate...")
+            except Exception:
+                pass
             if os.path.exists(project_path):
                 try:
                     gate = QualityGate(project_path)
@@ -295,6 +459,10 @@ class WorkflowRunner:
                         logger.warning(f"Quality Gate FAIL: {gate_result['errors']}")
                         self.status = "FAILED"
                         logger.info(f"STATUS CHANGE: {self.status} - Quality Gate fallido.")
+                        try:
+                            add_dashboard_log("QualityGate: Fallo detectado.")
+                        except Exception:
+                            pass
                 except Exception as e:
                     logger.error(f"Error ejecutando Quality Gate: {str(e)}")
                     self.status = "FAILED"
@@ -310,6 +478,17 @@ class WorkflowRunner:
             learner.extract_and_learn(session_id=workflow_id, workflow_id=workflow_id, status=self.status, quality_errors=q_errors)
         except Exception as le:
             logger.warning(f"No se pudo ejecutar el autoaprendizaje al final del workflow: {str(le)}")
+
+        # Marcar workflow como completado en el dashboard
+        try:
+            update_dashboard_state({
+                "status": "COMPLETED" if self.status == "RUNNING" else "FAILED",
+                "active_agent": "Ninguno",
+                "active_role": "Ninguno"
+            })
+            add_dashboard_log(f"Workflow finalizado con estado: {self.status}")
+        except Exception:
+            pass
 
         if self.status == "FAILED":
             return {"status": "FAIL", "error": "Workflow execution failed or Quality Gate errors", "details": gate_result}
