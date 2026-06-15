@@ -378,7 +378,7 @@ class WorkflowRunner:
                     add_dashboard_log(f"[{agent_id}] Ejecutando herramienta {tool_name} con args: {json.dumps(tool_args)}")
                 except Exception:
                     pass
-                result = self.mcp_executor.execute_tool(tool_name, tool_args)
+                result = self.mcp_executor.execute_tool(tool_name, tool_args, agent_role=context.get("role"))
                 logger.info(f"Resultado de herramienta {tool_name}: {result['status']}")
                 try:
                     add_dashboard_log(f"[{agent_id}] Resultado {tool_name}: {result['status']}")
@@ -408,6 +408,18 @@ class WorkflowRunner:
         self.active_steps_completed = []
         logger.info(f"STATUS CHANGE: {self.status} - Iniciando ejecución de workflow: {workflow_id} para proyecto: {project_name}")
         
+        wf = self.workflows.get(workflow_id)
+        if not wf:
+            self.status = "FAILED"
+            logger.error(f"STATUS CHANGE: {self.status} - Workflow no encontrado: {workflow_id}")
+            try:
+                from runtime.dashboard import update_dashboard_state, add_dashboard_log
+                update_dashboard_state({"status": "FAILED"})
+                add_dashboard_log(f"Fallo: Workflow {workflow_id} no encontrado.")
+            except Exception:
+                pass
+            return {"status": "FAIL", "error": "Workflow no encontrado"}
+
         # Iniciar servidor de dashboard en background de forma automática si no está ya arriba
         try:
             from runtime.dashboard import start_dashboard_server, update_dashboard_state, add_dashboard_log
@@ -415,22 +427,13 @@ class WorkflowRunner:
             update_dashboard_state({
                 "status": "RUNNING",
                 "project_name": project_name,
-                "workflow_id": workflow_id
+                "workflow_id": workflow_id,
+                "all_steps": wf.get("steps", []),
+                "completed_steps": []
             })
             add_dashboard_log(f"Iniciando workflow: {workflow_id} para {project_name}")
         except Exception as e:
             logger.warning(f"No se pudo iniciar el dashboard server: {str(e)}")
-
-        wf = self.workflows.get(workflow_id)
-        if not wf:
-            self.status = "FAILED"
-            logger.error(f"STATUS CHANGE: {self.status} - Workflow no encontrado: {workflow_id}")
-            try:
-                update_dashboard_state({"status": "FAILED"})
-                add_dashboard_log(f"Fallo: Workflow {workflow_id} no encontrado.")
-            except Exception:
-                pass
-            return {"status": "FAIL", "error": "Workflow no encontrado"}
  
         # Validamos agentes
         try:
@@ -489,6 +492,12 @@ class WorkflowRunner:
                 })
                 steps_execution.append(agent_id)
                 self.active_steps_completed = steps_execution
+                try:
+                    update_dashboard_state({
+                        "completed_steps": list(steps_execution)
+                    })
+                except Exception:
+                    pass
 
             except Exception as e:
                 logger.error(f"Error ejecutando paso {agent_id}: {str(e)}")

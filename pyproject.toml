@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psycho-ai-devos"
+version = "1.5.0"
+authors = [
+    { name = "PsychoSv_503 Team" }
+]
+description = "Autonomous AI Agent with MCP, RAG & Auto-learning"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools"
+]
+dependencies = [
+    "requests",
+    "graphiti-core",
+    "openai",
+    "python-dotenv",
+    "nest-asyncio",
+    "pydantic>=2.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/Psycho503DevSv/dev-psycho-ai-agency"
+
+[project.scripts]
+psycho-devos = "setup:main"

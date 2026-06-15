@@ -19,16 +19,26 @@ class McpExecutor:
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-    def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Despacha y ejecuta herramientas simulando un servidor MCP local."""
-        logger.info(f"Ejecutando herramienta MCP: {tool_name} con argumentos: {arguments}")
+    def execute_tool(self, tool_name: str, arguments: Dict[str, Any], agent_role: str = None) -> Dict[str, Any]:
+        """Despacha y ejecuta herramientas simulando un servidor MCP local, verificando permisos por rol."""
+        logger.info(f"Ejecutando herramienta MCP: {tool_name} para rol '{agent_role}' con argumentos: {arguments}")
         
+        # Guardrail granular por rol para la herramienta 'run_command'
+        if tool_name == "run_command" and agent_role:
+            cmd = arguments.get("command", "").strip()
+            if not self._check_role_permissions(agent_role, cmd):
+                return {
+                    "status": "FAIL",
+                    "error": f"Acceso Denegado: El rol '{agent_role}' no tiene permiso para ejecutar el comando: {cmd}"
+                }
+
         try:
             method = getattr(self, f"_tool_{tool_name.replace(':', '_')}", None)
             if not method:
                 res = {"status": "FAIL", "error": f"Herramienta '{tool_name}' no soportada en el ejecutor local."}
             else:
                 res = method(arguments)
+
                 
             # Loguear evento de herramienta al dashboard
             try:
@@ -174,6 +184,50 @@ class McpExecutor:
         r"\|\s*iex\b",                                      # PowerShell IEX
         r"\binvoke-expression\b",                           # raw IEX
     ]
+
+    # Whitelist granular de comandos por rol de agente (10/10 Seguridad)
+    _ROLE_COMMAND_WHITELIST = {
+        "frontend-developer": [
+            r"\bnpm\b", r"\bnpx\b", r"\bnode\b", r"\bgit\b", r"\becho\b"
+        ],
+        "backend-developer": [
+            r"\bnpm\b", r"\bnpx\b", r"\bnode\b", r"\bpython\b", r"\bpip\b", r"\bgit\b", r"\becho\b"
+        ],
+        "qa-engineer": [
+            r"\bnpm\b", r"\bpytest\b", r"\bpython\b", r"\bgit\b", r"\becho\b"
+        ],
+        "security-analyst": [
+            r"\bnpm\b", r"\baudit\b", r"\bsafety\b", r"\bbandit\b", r"\bgit\b"
+        ],
+        "project-manager": [
+            r"\bgit\b", r"\becho\b", r"\bcat\b"
+        ],
+        "ceo": [
+            r".*" # El CEO tiene control total
+        ]
+    }
+
+    def _check_role_permissions(self, role: str, command: str) -> bool:
+        """Comprueba si el rol del agente tiene autorización para ejecutar el comando dado."""
+        role_clean = role.lower().strip()
+        cmd_lower = command.lower().strip()
+        
+        # Si el rol no está definido, por defecto somos permisivos pero con advertencia
+        if role_clean not in self._ROLE_COMMAND_WHITELIST:
+            logger.warning(f"Rol '{role_clean}' no catalogado en whitelist. Permitiendo por compatibilidad.")
+            return True
+
+        allowed_patterns = self._ROLE_COMMAND_WHITELIST[role_clean]
+        for pattern in allowed_patterns:
+            if re.search(pattern, cmd_lower):
+                return True
+
+        self._log_security_violation(
+            "Violación de permisos de Rol",
+            f"El rol '{role}' intentó ejecutar un comando denegado: {command}"
+        )
+        return False
+
 
     def _check_guardrails(self, command: str) -> bool:
         """Retorna True si el comando pasa los guardrails (es seguro)."""
@@ -336,11 +390,39 @@ class McpExecutor:
         print(f"💬 PREGUNTA DEL AGENTE:\n{question}")
         print("="*50)
         
-        try:
-            user_response = input("Respuesta > ")
-            return {"status": "SUCCESS", "response": user_response}
-        except Exception as e:
-            return {"status": "FAIL", "error": f"Error leyendo respuesta del usuario: {str(e)}"}
+        import threading
+        from runtime.dashboard import (
+            set_pending_question, 
+            clear_pending_question, 
+            wait_for_response, 
+            get_web_response,
+            _question_event
+        )
+        
+        set_pending_question(question)
+        
+        console_res = []
+        def read_console():
+            try:
+                val = input("Respuesta (o responde vía Web UI) > ")
+                console_res.append(val)
+                _question_event.set()
+            except Exception:
+                pass
+                
+        t = threading.Thread(target=read_console, daemon=True)
+        t.start()
+        
+        _question_event.wait()
+        clear_pending_question()
+        
+        if console_res:
+            return {"status": "SUCCESS", "response": console_res[0]}
+        else:
+            web_val = get_web_response()
+            if web_val is not None:
+                return {"status": "SUCCESS", "response": web_val}
+            return {"status": "FAIL", "error": "No se recibió respuesta."}
 
     # --- Herramientas de Previsualización Nativa ---
 
