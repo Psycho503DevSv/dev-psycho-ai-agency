@@ -25,3 +25,6 @@
 * Verifica la presencia de archivos obligatorios (README.md, requirements.txt) en el proyecto.
 * Implementa un validador de calidad que busque archivos faltantes en el proyecto.
 * Documenta los archivos obligatorios en el proyecto para evitar confusiones en el futuro.
+* Verifica la existencia de archivos obligatorios (README.md y requirements.txt) antes de iniciar el workflow.
+* Asegúrate de que los archivos mencionados en el error estén en el directorio correcto y no estén omitidos en el código.
+* Revisa la configuración del QualityGate para asegurarte de que los archivos obligatorios estén incluidos en la lista de verificación.

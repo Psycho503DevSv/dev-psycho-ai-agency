@@ -37,7 +37,7 @@ class GraphitiBridge:
             # Inicializar la instancia de Graphiti
             self._graphiti = Graphiti(
                 uri=self.uri,
-                username=self.user,
+                user=self.user,
                 password=self.password
             )
             
