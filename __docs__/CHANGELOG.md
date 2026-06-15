@@ -2,6 +2,15 @@
 
 Todos los cambios notables realizados en el framework PsychoSv_503 AI DevOS están documentados en este archivo.
 
+## [1.3.0] - 2026-06-15
+
+### Añadido (Fase 2: Seguridad y Sandboxing)
+* **Command Guardrails (`_tool_run_command`):** Análisis dinámico de comandos antes de su ejecución para evitar operaciones destructivas (ej. `rm -rf`, `del /s`, redirecciones crudas de disco o descargas maliciosas).
+* **Filtro de Escritura de Archivos (`_tool_write_file`):** Denegación automática de escrituras sobre claves privadas (`.pem`, `.key`, `id_rsa`), credenciales y archivos críticos de configuración del terminal (`.bashrc`, `.zshrc`).
+* **Sanitización contra Prompt Injection (`sanitize_prompt_injection`):** Reemplazo de patrones y frases que busquen invalidar las directivas iniciales del sistema operativo en el contexto de memoria del agente.
+* **Registro de Auditoría Central (`security_audit.log`):** Generación automática de logs detallados de seguridad ante cualquier intento de evasión de políticas del sandboxing.
+* **Pruebas de Seguridad en pytest:** Añadidos casos de test en la suite de pruebas para verificar el comportamiento de los guardrails de terminal, filesystem e inyección.
+
 ## [1.2.0] - 2026-06-15
 
 ### Añadido (Fase 1: Estabilidad y Robustez)

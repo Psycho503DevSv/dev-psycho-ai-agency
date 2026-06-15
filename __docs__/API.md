@@ -105,5 +105,25 @@ Lanza la previsualización nativa del proyecto según su tipo (web-estatica, kin
   * `package_name` (string, opcional): Nombre del paquete Android (requerido para `android-apk`).
 * **Retorno:** `{"status": "SUCCESS/FAIL", "message": "mensaje descriptivo", "project_type": "...", ...}`
 
+## 4. Políticas de Seguridad y Sandboxing (v1.3.0+)
+
+El runtime aplica políticas activas para asegurar la ejecución del agente en entornos de desarrollo abiertos y autoentrenables:
+
+### 4.1 Command Guardrails (run_command)
+Se interceptan comandos peligrosos antes de su ejecución. Comandos que contengan patrones destructivos o de alteración del sistema son rechazados inmediatamente retornando `FAIL` con error de acceso denegado.
+* **Patrones Bloqueados:** `rm -rf`, `rmdir /s`, `del /s`, `del /q`, `format`, `mkfs`, `shutdown`, `reboot`, `poweroff`, `init 0`, Fork bombs (`:(){ :|:& };:`), redirecciones crudas de disco (`> /dev/sda`), y tuberías a intérpretes de comandos sin verificar (`| sh`, `| bash`, `| iex`, `Invoke-Expression`).
+
+### 4.2 Filtro de Escritura del Filesystem (write_file)
+Evita la sobreescritura de credenciales, llaves de seguridad y configuraciones de sesión crítica de la máquina anfitriona.
+* **Extensiones Denegadas:** `.pem`, `.key`, `.pub`, `.cer`, `.crt`, `.der`, `.pfx`, `.p12`
+* **Nombres de Archivos Bloqueados:** `.bashrc`, `.bash_profile`, `.profile`, `.zshrc`, `.zprofile`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `authorized_keys`.
+* **Rutas Bloqueadas:** Cualquier ruta que contenga subcarpetas `.ssh/` o intente saltar los límites del workspace base.
+
+### 4.3 Sanitización de Contexto contra Prompt Injection (agent_loader)
+Sanitiza de forma proactiva la memoria dinámica del proyecto cargada desde Graphiti u otros archivos markdown, reemplazando instrucciones de inyección típicas (ej. `"ignore previous instructions"`, `"disregard all previous"`, `"you are now a..."`, `"nueva directiva:"`) por marcadores de advertencia (`[INJECTION_DETECTOR: ...]`), protegiendo al agente del secuestro de comportamiento por parte de código ajeno o descripciones de tareas manipuladas.
+
+### 4.4 Registro de Auditoría
+Cualquier intento de violación a estas reglas de seguridad queda registrado inmediatamente en `memory/security_audit.log` con marca de tiempo y descripción del recurso o comando bloqueado.
+
 ---
-*Actualizado por: MCP-Architect | Fecha: 2026-06-15*
+*Actualizado por: Security & Sandboxing Agent | Fecha: 2026-06-15*

@@ -34,6 +34,21 @@ class McpExecutor:
             raise PermissionError(f"Acceso denegado fuera del workspace: {path}")
         return path
 
+    def _log_security_violation(self, reason: str, details: str):
+        """Registra incidentes de seguridad en el archivo de auditoría centralizado."""
+        import datetime
+        try:
+            memory_dir = os.path.join(self.base_dir, "memory")
+            os.makedirs(memory_dir, exist_ok=True)
+            log_path = os.path.join(memory_dir, "security_audit.log")
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = f"[{timestamp}] [ALERTA DE SEGURIDAD] Motivo: {reason} | Detalles: {details}\n"
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(log_entry)
+            logger.warning(f"Incidente de seguridad registrado: {reason} - {details}")
+        except Exception as e:
+            logger.error(f"Error escribiendo en security_audit.log: {str(e)}")
+
     # --- Herramientas del Filesystem ---
 
     def _tool_read_file(self, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,6 +62,18 @@ class McpExecutor:
     def _tool_write_file(self, args: Dict[str, Any]) -> Dict[str, Any]:
         path = self._resolve_path(args.get("path", ""))
         content = args.get("content", "")
+        
+        # Filtro de seguridad: Bloquear claves privadas, archivos del sistema/shell, e inyecciones en el entorno
+        filename = os.path.basename(path).lower()
+        forbidden_extensions = {".pem", ".key", ".pub", ".cer", ".crt", ".der", ".pfx", ".p12"}
+        forbidden_files = {".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "authorized_keys"}
+        
+        # Comprobación de extensiones y nombres bloqueados
+        _, ext = os.path.splitext(filename)
+        if ext in forbidden_extensions or filename in forbidden_files or any(part.startswith(".ssh") for part in path.replace("\\", "/").split("/")):
+            self._log_security_violation("Escritura bloqueada", f"Intento de escribir en archivo restringido: {path}")
+            return {"status": "FAIL", "error": "Acceso denegado: No está permitido escribir claves privadas, credenciales ni configuraciones críticas de terminal."}
+
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -75,6 +102,39 @@ class McpExecutor:
 
         if not command:
             return {"status": "FAIL", "error": "Comando vacío"}
+
+        # Filtro de Command Guardrails
+        cmd_lower = command.lower()
+        
+        # Patrones destructivos o muy peligrosos
+        dangerous_patterns = [
+            r"\brm\s+-rf\b",        # rm -rf
+            r"\brmdir\s+/s\b",      # rmdir /s
+            r"\bdel\s+/s\b",        # del /s
+            r"\bdel\s+/q\b",        # del /q
+            r"\bformat\b",          # format disk
+            r"\bmkfs\b",            # mkfs
+            r"\bshutdown\b",        # shutdown
+            r"\breboot\b",          # reboot
+            r"\bpoweroff\b",        # poweroff
+            r"\binit\s+0\b",        # init 0
+            r":\(\)\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", # Fork bomb
+            r">\s*/dev/sda\b",      # Raw write to sda
+            r">\s*/dev/nvme",       # Raw write to nvme
+            r"\|\s*sh\b",           # Piping to shell (curl ... | sh)
+            r"\|\s*bash\b",         # Piping to bash
+            r"\|\s*iex\b",          # Piping to Invoke-Expression (PowerShell)
+            r"\binvoke-expression\b" # raw Invoke-Expression
+        ]
+        
+        import re
+        for pattern in dangerous_patterns:
+            if re.search(pattern, cmd_lower):
+                self._log_security_violation("Comando bloqueado", f"Comando detectado como peligroso: {command}")
+                return {
+                    "status": "FAIL",
+                    "error": "Acceso denegado: Comando bloqueado por políticas de seguridad del sistema."
+                }
 
         logger.info(f"Ejecutando comando en terminal autónomo: '{command}' en '{resolved_cwd}'")
         

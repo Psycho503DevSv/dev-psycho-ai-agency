@@ -48,6 +48,20 @@ class AgentLoader:
 
         return self.agents
 
+    def sanitize_prompt_injection(self, text: str) -> str:
+        """Sanitiza el texto de entrada para neutralizar ataques comunes de Prompt Injection."""
+        import re
+        patterns = [
+            (r"(?i)\bignore\s+(?:all\s+)?previous\s+instructions\b", "[INJECTION_DETECTOR: INTENTO DE IGNORAR INSTRUCCIONES]"),
+            (r"(?i)\bdisregard\s+(?:all\s+)?previous\b", "[INJECTION_DETECTOR: INTENTO DE IGNORAR CONTEXTO]"),
+            (r"(?i)\byou\s+are\s+now\s+a\b", "[INJECTION_DETECTOR: INTENTO DE CAMBIO DE ROL]"),
+            (r"(?i)(?:^|[^a-zA-Z0-9_])nueva\s+directiva:", "[INJECTION_DETECTOR: INTENTO DE SOBREESCRITURA DE DIRECTIVA]")
+        ]
+        sanitized = text
+        for pattern, replacement in patterns:
+            sanitized = re.sub(pattern, replacement, sanitized)
+        return sanitized
+
     def build_context_for_agent(self, agent_id: str) -> Optional[Dict]:
         """Construye un contexto filtrado y optimizado para un agente específico, reduciendo tokens."""
         agent = self.agents.get(agent_id)
@@ -105,7 +119,8 @@ class AgentLoader:
                     facts = asyncio.run(bridge.search_context(query))
 
                 if facts:
-                    shared_memory_blocks.append("### MEMORIA SEMÁNTICA DINÁMICA (GRAPHITI)\n" + "\n".join([f"- {fact}" for fact in facts]) + "\n")
+                    sanitized_facts = [self.sanitize_prompt_injection(fact) for fact in facts]
+                    shared_memory_blocks.append("### MEMORIA SEMÁNTICA DINÁMICA (GRAPHITI)\n" + "\n".join([f"- {fact}" for fact in sanitized_facts]) + "\n")
             except Exception as e:
                 logger.warning(f"No se pudo recuperar memoria semántica de Graphiti para {agent_id}: {str(e)}")
 
@@ -118,7 +133,8 @@ class AgentLoader:
                 try:
                     with open(file_path, 'r', encoding='utf-8-sig') as f:
                         content = f.read()
-                    shared_memory_blocks.append(f"### MEMORY: {filename}\n{content}\n")
+                    sanitized_content = self.sanitize_prompt_injection(content)
+                    shared_memory_blocks.append(f"### MEMORY: {filename}\n{sanitized_content}\n")
                 except Exception as e:
                     logger.warning(f"No se pudo cargar {filename} para {agent_id}: {str(e)}")
 
