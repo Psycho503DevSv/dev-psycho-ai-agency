@@ -1,10 +1,10 @@
 import os
 import json
-import logging
 from typing import Dict, List, Optional
 from config import settings
 
-logger = logging.getLogger("AgentLoader")
+from runtime.logger import logger
+
 
 class AgentLoader:
     def __init__(self, base_path: str = None, registry_path: str = None):

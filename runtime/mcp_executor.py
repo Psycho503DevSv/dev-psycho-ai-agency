@@ -1,10 +1,10 @@
 import os
 import re
 import subprocess
-import logging
 from typing import Dict, Any
 
-logger = logging.getLogger("McpExecutor")
+from runtime.logger import logger
+from runtime.schemas import CommandSchema, ExecutionResultSchema
 
 # ── Docker sandbox detection ──────────────────────────────────────────────────
 # Cuando AGENT_ENV=docker el proceso ya corre dentro del contenedor.
@@ -17,6 +17,7 @@ _DOCKER_CONTAINER = os.environ.get("AGENT_CONTAINER_NAME", "psycho503_agent")
 class McpExecutor:
     def __init__(self, base_dir: str = None):
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
     def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Despacha y ejecuta herramientas simulando un servidor MCP local."""
@@ -226,12 +227,15 @@ class McpExecutor:
             }
 
     def _tool_run_command(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        command = args.get("command", "")
+        try:
+            # Validación estricta del comando de entrada usando Pydantic
+            validated_input = CommandSchema(command=args.get("command", ""))
+            command = validated_input.command
+        except Exception as ve:
+            return {"status": "FAIL", "error": f"Entrada inválida: {str(ve)}"}
+
         cwd = args.get("cwd", ".")
         timeout = int(args.get("timeout", 60))
-
-        if not command:
-            return {"status": "FAIL", "error": "Comando vacío"}
 
         # ── Guardrails de seguridad ────────────────────────────────────────── #
         if not self._check_guardrails(command):
@@ -244,7 +248,20 @@ class McpExecutor:
         # Caso 1: Corriendo en entorno local CON sandbox Docker habilitado
         if _AGENT_ENV == "local" and _USE_DOCKER_SB:
             logger.info(f"[SANDBOX] Redirigiendo comando al contenedor Docker '{_DOCKER_CONTAINER}'")
-            return self._run_in_docker_sandbox(command, cwd, timeout)
+            raw_res = self._run_in_docker_sandbox(command, cwd, timeout)
+            # Validar salida
+            try:
+                validated_output = ExecutionResultSchema(
+                    status=raw_res.get("status", "FAIL"),
+                    stdout=raw_res.get("stdout", ""),
+                    stderr=raw_res.get("stderr", ""),
+                    code=raw_res.get("return_code", -1),
+                    sandbox="docker",
+                    message=raw_res.get("error")
+                )
+                return validated_output.model_dump()
+            except Exception as e:
+                return {"status": "FAIL", "error": f"Error de validación de salida Docker: {str(e)}"}
 
         # Caso 2: Ya corremos dentro del contenedor Docker (auto-sandbox)
         if _AGENT_ENV == "docker":
@@ -267,22 +284,46 @@ class McpExecutor:
                 text=True,
                 timeout=timeout
             )
-            return {
+            raw_res = {
                 "status": "SUCCESS" if result.returncode == 0 else "FAIL",
-                "return_code": result.returncode,
+                "code": result.returncode,
                 "stdout": result.stdout,
                 "stderr": result.stderr,
                 "sandbox": _AGENT_ENV
             }
         except subprocess.TimeoutExpired as te:
-            return {
+            raw_res = {
                 "status": "FAIL",
-                "error": f"El comando excedió el tiempo límite de {timeout} segundos.",
+                "code": -1,
                 "stdout": te.stdout or "",
-                "stderr": te.stderr or ""
+                "stderr": te.stderr or "",
+                "sandbox": _AGENT_ENV,
+                "message": f"El comando excedió el tiempo límite de {timeout} segundos."
             }
         except Exception as e:
-            return {"status": "FAIL", "error": f"Fallo en ejecución: {str(e)}"}
+            raw_res = {
+                "status": "FAIL",
+                "code": -1,
+                "stdout": "",
+                "stderr": str(e),
+                "sandbox": _AGENT_ENV,
+                "message": f"Fallo en ejecución: {str(e)}"
+            }
+
+        # Validar el resultado de la ejecución con Pydantic antes de retornarlo
+        try:
+            validated_output = ExecutionResultSchema(
+                status=raw_res["status"],
+                stdout=raw_res.get("stdout", ""),
+                stderr=raw_res.get("stderr", ""),
+                code=raw_res.get("code", -1),
+                sandbox=raw_res.get("sandbox", "local"),
+                message=raw_res.get("message")
+            )
+            return validated_output.model_dump()
+        except Exception as ve:
+            return {"status": "FAIL", "error": f"Error validando salida de ejecución: {str(ve)}"}
+
 
     # --- Herramientas de Interacción Humana ---
 
@@ -442,4 +483,21 @@ class McpExecutor:
             }
 
         return {"status": "FAIL", "error": "Tipo no manejado."}
+
+    def cleanup(self):
+        """Detiene y remueve el contenedor del sandbox de Docker ordenadamente si está en ejecución."""
+        if _AGENT_ENV == "local" and _USE_DOCKER_SB:
+            logger.info(f"[CLEANUP] Limpiando sandbox de Docker: deteniendo contenedor '{_DOCKER_CONTAINER}'...")
+            try:
+                # Detener contenedor rápidamente
+                subprocess.run(
+                    ["docker", "stop", "-t", "2", _DOCKER_CONTAINER],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5
+                )
+                logger.info(f"[CLEANUP] Sandbox Docker detenido con éxito.")
+            except Exception as e:
+                logger.warning(f"[CLEANUP] No se pudo detener el contenedor Docker: {str(e)}")
+
 

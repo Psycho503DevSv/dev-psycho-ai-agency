@@ -3,10 +3,10 @@ import socketserver
 import json
 import os
 import threading
-import logging
+
+from runtime.logger import logger
 
 PORT = 8050
-logger = logging.getLogger("Dashboard")
 
 # Variables globales para almacenar el estado y logs de eventos
 _state = {

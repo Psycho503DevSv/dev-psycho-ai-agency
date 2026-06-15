@@ -1,9 +1,12 @@
 import os
 import json
-import logging
 import requests
+import signal
+import sys
 from typing import List, Dict, Any, Optional
 from config import settings
+
+from runtime.logger import logger
 
 # Intentamos importar componentes del runtime
 try:
@@ -13,15 +16,12 @@ try:
     from mcp_executor import McpExecutor
 except ImportError:
     # Si se ejecuta directamente sin configurar el path
-    import sys
     sys.path.append(os.path.dirname(__file__))
     from agent_loader import AgentLoader
     from memory_engine import MemoryEngine
     from quality_gate import QualityGate
     from mcp_executor import McpExecutor
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("WorkflowRunner")
 
 class WorkflowRunner:
     def __init__(self, registry_path: str = None):
@@ -32,7 +32,62 @@ class WorkflowRunner:
         self.workflows: Dict[str, dict] = {}
         self.projects_dir = settings.PROJECTS_DIR
         self.status = "IDLE"
+        self.active_workflow_id = None
+        self.active_project_name = None
+        self.active_steps_completed = []
         self._load_registry()
+        
+        # Registrar manejadores de interrupciones del sistema (Graceful Shutdown)
+        self._setup_shutdown_handlers()
+
+    def _setup_shutdown_handlers(self):
+        """Captura señales de interrupción de sistema para apagado ordenado."""
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                signal.signal(sig, self._handle_graceful_shutdown)
+            except ValueError:
+                # Ocurre en sub-hilos de Python en ciertas arquitecturas
+                pass
+
+    def _handle_graceful_shutdown(self, signum, frame):
+        """Bucle de apagado seguro: Libera Docker y persiste el estado interrumpido."""
+        logger.warning(f"\n[SHUTDOWN] Interrupción detectada (señal {signum}). Iniciando apagado seguro...")
+        self.status = "INTERRUPTED"
+        
+        # 1. Guardar estado interrumpido a memoria
+        if self.active_workflow_id:
+            memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+            os.makedirs(memory_dir, exist_ok=True)
+            interrupted_file = os.path.join(memory_dir, "interrupted_state.json")
+            try:
+                with open(interrupted_file, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        "workflow_id": self.active_workflow_id,
+                        "project_name": self.active_project_name,
+                        "completed_steps": self.active_steps_completed,
+                        "timestamp": datetime.now().isoformat() if 'datetime' in globals() else None
+                    }, f, indent=2)
+                logger.info(f"[SHUTDOWN] Estado del workflow persistido en: {interrupted_file}")
+            except Exception as e:
+                logger.error(f"[SHUTDOWN] No se pudo guardar el estado de interrupción: {str(e)}")
+
+        # 2. Detener contenedor sandbox si aplica
+        try:
+            self.mcp_executor.cleanup()
+        except Exception as e:
+            logger.error(f"[SHUTDOWN] Error durante la limpieza del McpExecutor: {str(e)}")
+
+        # 3. Notificar al dashboard
+        try:
+            from runtime.dashboard import update_dashboard_state, add_dashboard_log
+            update_dashboard_state({"status": "INTERRUPTED"})
+            add_dashboard_log("[SHUTDOWN] Motor del agente interrumpido y cerrado ordenadamente.")
+        except Exception:
+            pass
+
+        logger.critical("[SHUTDOWN] Liberación completa. Saliendo del proceso.")
+        sys.exit(0)
+
 
     def _load_registry(self):
         if not os.path.exists(self.registry_path):
@@ -42,95 +97,111 @@ class WorkflowRunner:
             self.workflows = {wf["id"]: wf for wf in json.load(f).get("workflows", [])}
 
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """Realiza una llamada HTTP directa a NVIDIA NIM o OpenAI con reintentos y timeouts."""
+        """Realiza una llamada HTTP directa a NVIDIA NIM o OpenAI con reintentos, timeouts y fallback cruzado."""
         nvidia_key = getattr(settings, "NVIDIA_API_KEY", "")
         openai_key = getattr(settings, "OPENAI_API_KEY", "")
 
+        # Definir los proveedores configurados disponibles
+        providers = []
         if nvidia_key:
-            api_url = "https://integrate.api.nvidia.com/v1/chat/completions"
-            api_key = nvidia_key
-            model_name = "meta/llama-3.1-8b-instruct"
-        elif openai_key:
-            api_url = "https://api.openai.com/v1/chat/completions"
-            api_key = openai_key
-            model_name = "gpt-4o-mini"
-        else:
+            providers.append({
+                "name": "NVIDIA NIM",
+                "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+                "key": nvidia_key,
+                "model": "meta/llama-3.1-8b-instruct"
+            })
+        if openai_key:
+            providers.append({
+                "name": "OpenAI",
+                "url": "https://api.openai.com/v1/chat/completions",
+                "key": openai_key,
+                "model": "gpt-4o-mini"
+            })
+
+        if not providers:
             raise ValueError("No se encontraron claves de API (NVIDIA_API_KEY o OPENAI_API_KEY) en config/settings.")
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model_name,
-            "messages": messages,
-            "temperature": 0.2
-        }
-
-        # Implementación de reintentos con Backoff Exponencial
+        # Intentar con los proveedores en secuencia (conmutación por error)
         import time
-        max_retries = 3
-        backoff = 2.0
+        last_exception = None
 
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(api_url, headers=headers, json=payload, timeout=45)
-                response.raise_for_status()
-                res_data = response.json()
-                
-                # Procesar y registrar uso de tokens
+        for provider in providers:
+            logger.info(f"Intentando llamada a LLM usando proveedor: {provider['name']} ({provider['model']})")
+            headers = {
+                "Authorization": f"Bearer {provider['key']}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": provider["model"],
+                "messages": messages,
+                "temperature": 0.2
+            }
+
+            max_retries = 2
+            backoff = 2.0
+
+            for attempt in range(max_retries):
                 try:
-                    usage = res_data.get("usage", {})
-                    prompt_tokens = usage.get("prompt_tokens", 0)
-                    completion_tokens = usage.get("completion_tokens", 0)
-                    
-                    # Estimar costo: gpt-4o-mini es $0.15/1M prompt, $0.60/1M completion. Llama-3.1-8b es similar o menor.
-                    # Usaremos una aproximación mixta de $0.15/1M y $0.60/1M para estimar.
-                    cost = (prompt_tokens * 0.00000015) + (completion_tokens * 0.00000060)
-                    
-                    # Intentar guardar localmente
-                    memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
-                    os.makedirs(memory_dir, exist_ok=True)
-                    token_file = os.path.join(memory_dir, "token_usage.json")
-                    
-                    accumulated = {"input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0, "total_calls": 0}
-                    if os.path.exists(token_file):
+                    response = requests.post(provider["url"], headers=headers, json=payload, timeout=30)
+                    response.raise_for_status()
+                    res_data = response.json()
+
+                    # Procesar y registrar uso de tokens
+                    try:
+                        usage = res_data.get("usage", {})
+                        prompt_tokens = usage.get("prompt_tokens", 0)
+                        completion_tokens = usage.get("completion_tokens", 0)
+                        cost = (prompt_tokens * 0.00000015) + (completion_tokens * 0.00000060)
+
+                        memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+                        os.makedirs(memory_dir, exist_ok=True)
+                        token_file = os.path.join(memory_dir, "token_usage.json")
+
+                        accumulated = {"input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0, "total_calls": 0}
+                        if os.path.exists(token_file):
+                            try:
+                                with open(token_file, 'r') as tf:
+                                    accumulated = json.load(tf)
+                            except Exception:
+                                pass
+
+                        accumulated["input_tokens"] += prompt_tokens
+                        accumulated["output_tokens"] += completion_tokens
+                        accumulated["estimated_cost_usd"] += cost
+                        accumulated["total_calls"] += 1
+
+                        with open(token_file, 'w') as tf:
+                            json.dump(accumulated, tf)
+
                         try:
-                            with open(token_file, 'r') as tf:
-                                accumulated = json.load(tf)
+                            from runtime.dashboard import update_dashboard_state
+                            update_dashboard_state({
+                                "input_tokens": accumulated["input_tokens"],
+                                "output_tokens": accumulated["output_tokens"],
+                                "estimated_cost_usd": accumulated["estimated_cost_usd"],
+                                "total_calls": accumulated["total_calls"]
+                            })
                         except Exception:
                             pass
-                            
-                    accumulated["input_tokens"] += prompt_tokens
-                    accumulated["output_tokens"] += completion_tokens
-                    accumulated["estimated_cost_usd"] += cost
-                    accumulated["total_calls"] += 1
-                    
-                    with open(token_file, 'w') as tf:
-                        json.dump(accumulated, tf)
-                        
-                    # Enviar actualización al dashboard en vivo
-                    try:
-                        from runtime.dashboard import update_dashboard_state
-                        update_dashboard_state({
-                            "input_tokens": accumulated["input_tokens"],
-                            "output_tokens": accumulated["output_tokens"],
-                            "estimated_cost_usd": accumulated["estimated_cost_usd"],
-                            "total_calls": accumulated["total_calls"]
-                        })
-                    except Exception:
-                        pass
-                except Exception as ex:
-                    logger.warning(f"No se pudo guardar métricas de uso de tokens: {str(ex)}")
+                    except Exception as ex:
+                        logger.warning(f"No se pudo guardar métricas de uso de tokens: {str(ex)}")
 
-                return res_data["choices"][0]["message"]["content"]
-            except (requests.RequestException, ValueError) as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"Fallo definitivo de conexión a LLM tras {max_retries} intentos: {str(e)}")
-                    raise e
-                sleep_time = backoff ** (attempt + 1)
-                logger.warning(f"Error llamando al LLM (intento {attempt + 1}/{max_retries}): {str(e)}. Reintentando en {sleep_time}s...")
-                time.sleep(sleep_time)
+                    return res_data["choices"][0]["message"]["content"]
+
+                except Exception as e:
+                    last_exception = e
+                    if attempt == max_retries - 1:
+                        logger.warning(f"Proveedor {provider['name']} falló tras {max_retries} intentos. Probando fallback si está disponible...")
+                        break
+                    sleep_time = backoff ** (attempt + 1)
+                    logger.warning(f"Error en {provider['name']} (intento {attempt + 1}/{max_retries}): {str(e)}. Reintentando en {sleep_time}s...")
+                    time.sleep(sleep_time)
+
+
+        # Si salimos de los bucles sin retornar, todos fallaron
+        logger.error(f"Fallo definitivo de todos los proveedores de LLM configurados.")
+        raise last_exception
+
 
     def _parse_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
         """Intenta extraer y parsear un bloque JSON de llamada a herramienta, aplicando auto-corrección."""
@@ -330,6 +401,9 @@ class WorkflowRunner:
     def run_workflow(self, workflow_id: str, project_name: str = "default_project") -> Dict:
         """Ejecuta la orquestación de un flujo definido."""
         self.status = "RUNNING"
+        self.active_workflow_id = workflow_id
+        self.active_project_name = project_name
+        self.active_steps_completed = []
         logger.info(f"STATUS CHANGE: {self.status} - Iniciando ejecución de workflow: {workflow_id} para proyecto: {project_name}")
         
         # Iniciar servidor de dashboard en background de forma automática si no está ya arriba
@@ -371,6 +445,7 @@ class WorkflowRunner:
 
         steps_execution = []
 
+
         for agent_id in wf.get("steps", []):
             if agent_id not in loaded_agents:
                 error_msg = f"Agente requerido {agent_id} no está disponible físicamente."
@@ -411,6 +486,8 @@ class WorkflowRunner:
                     "output": agent_output
                 })
                 steps_execution.append(agent_id)
+                self.active_steps_completed = steps_execution
+
             except Exception as e:
                 logger.error(f"Error ejecutando paso {agent_id}: {str(e)}")
                 self.status = "FAILED"

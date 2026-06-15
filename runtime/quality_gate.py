@@ -1,15 +1,16 @@
 import os
 import ast
-import logging
 from typing import List, Dict
 
-logger = logging.getLogger("QualityGate")
+from runtime.logger import logger
+from runtime.schemas import GateDecisionSchema
 
 class QualityGate:
     def __init__(self, project_path: str):
         self.project_path = project_path
         self.errors = []
         self.required_files = ["README.md", "requirements.txt"]
+
 
     def validate_syntax(self) -> bool:
         """Valida que todos los archivos .py sean sintácticamente correctos."""
@@ -39,16 +40,40 @@ class QualityGate:
         syntax = self.validate_syntax()
         structure = self.validate_structure()
         
-        status = "SUCCESS" if (syntax and structure) else "FAIL"
+        approved = (syntax and structure)
+        score = 10.0 if approved else max(2.0, 10.0 - (len(self.errors) * 2.0))
         
-        return {
-            "status": status,
-            "errors": self.errors,
-            "checks": {
-                "syntax": "OK" if syntax else "FAIL",
-                "structure": "OK" if structure else "FAIL"
-            }
+        reasons = []
+        recommendations = []
+        if not approved:
+            reasons = [f"Fallo de control de calidad: {err}" for err in self.errors]
+            recommendations = [
+                "Corrija los errores de sintaxis indicados." if not syntax else "",
+                "Asegúrese de incluir README.md y requirements.txt en la raíz del proyecto." if not structure else ""
+            ]
+            recommendations = [r for r in recommendations if r]
+        else:
+            reasons = ["Todos los chequeos de calidad pasaron exitosamente."]
+            recommendations = ["El proyecto mantiene los estándares de robustez 10/10."]
+
+        # Validar la decisión usando Pydantic
+        decision = GateDecisionSchema(
+            approved=approved,
+            score=score,
+            reasons=reasons,
+            recommendations=recommendations
+        )
+
+        # Retornamos el diccionario dict-compatible e incluimos logs/checks para retrocompatibilidad
+        res = decision.model_dump()
+        res["status"] = "SUCCESS" if approved else "FAIL"
+        res["errors"] = self.errors
+        res["checks"] = {
+            "syntax": "OK" if syntax else "FAIL",
+            "structure": "OK" if structure else "FAIL"
         }
+        return res
+
 
 if __name__ == "__main__":
     # Prueba rápida

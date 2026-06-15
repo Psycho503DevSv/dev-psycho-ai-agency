@@ -1,7 +1,10 @@
 import os
 import json
-import logging
 from datetime import datetime
+
+from runtime.logger import logger
+from runtime.schemas import LessonSchema, LearningPayloadSchema
+
 try:
     from config import settings
 except ImportError:
@@ -9,7 +12,6 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from config import settings
 
-logger = logging.getLogger("AutoLearner")
 
 class AutoLearner:
     def __init__(self):
@@ -117,9 +119,32 @@ class AutoLearner:
         return False
 
     def _append_lessons(self, new_lessons_md: str):
-        """Añade lecciones aprendidas de forma segura a memory/lessons_learned.md."""
+        """Añade lecciones aprendidas de forma segura a memory/lessons_learned.md, validando tipos."""
         os.makedirs(os.path.dirname(self.lessons_path), exist_ok=True)
         
+        # Validación con Pydantic: Estructurar la entrada como lección formal
+        validated_lessons = []
+        for i, line in enumerate(new_lessons_md.strip().split("\n")):
+            clean_line = line.strip()
+            if not clean_line:
+                continue
+            # Intentar parsear a LessonSchema para garantizar formato de datos rígido
+            try:
+                lesson = LessonSchema(
+                    id=f"auto_lesson_{int(datetime.now().timestamp())}_{i}",
+                    phase="auto_learner",
+                    trigger="Workflow Execution Logs/Error",
+                    action=clean_line,
+                    confidence=0.95
+                )
+                validated_lessons.append(lesson.action)
+            except Exception as ve:
+                logger.warning(f"Lección no pasó validación estricta de Pydantic: {str(ve)}")
+
+        if not validated_lessons:
+            logger.info("No se extrajeron lecciones válidas tras pasar por el filtro Pydantic.")
+            return
+
         existing_content = ""
         if os.path.exists(self.lessons_path):
             try:
@@ -133,10 +158,9 @@ class AutoLearner:
 
         # Validar duplicados básicos
         lines_to_add = []
-        for line in new_lessons_md.strip().split("\n"):
-            clean_line = line.strip()
-            if clean_line and clean_line not in existing_content:
-                lines_to_add.append(line)
+        for lesson_action in validated_lessons:
+            if lesson_action not in existing_content:
+                lines_to_add.append(lesson_action)
 
         if not lines_to_add:
             logger.info("Las lecciones detectadas ya están documentadas en lessons_learned.md. Saltando escritura.")
@@ -150,6 +174,7 @@ class AutoLearner:
             logger.info("Archivo memory/lessons_learned.md actualizado exitosamente con nuevas lecciones.")
         except Exception as e:
             logger.error(f"Error escribiendo en lessons_learned.md: {str(e)}")
+
 
 if __name__ == "__main__":
     # Prueba del módulo
