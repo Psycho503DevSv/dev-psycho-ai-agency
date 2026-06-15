@@ -2,6 +2,14 @@
 
 Todos los cambios notables realizados en el framework PsychoSv_503 AI DevOS están documentados en este archivo.
 
+## [1.4.0] - 2026-06-15
+
+### Añadido (Fase 4: Escalabilidad, RAG y Gestión de Contexto)
+* **Compresión Activa de Contexto (`context_compressor.py`):** Evaluación del volumen de tokens en el historial del agente previo a la inferencia; resume automáticamente los turnos de chat más antiguos si superan los 10,000 tokens para proteger la ventana de contexto.
+* **Motor Local RAG (`rag_engine.py`):** Indexador de código local y método de búsqueda de código fuente ligero para evitar cargar archivos extensos completos.
+* **Herramienta MCP `search_code`:** Expone el motor RAG local a los agentes como una herramienta MCP estándar del sistema operativo.
+* **Pruebas de RAG y Contexto (`test_context_rag.py`):** Suite de tests unitarios rápidos y offline para validar las búsquedas y la compresión del historial.
+
 ## [1.3.0] - 2026-06-15
 
 ### Añadido (Fase 2: Seguridad y Sandboxing)

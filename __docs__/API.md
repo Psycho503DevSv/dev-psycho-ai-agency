@@ -105,7 +105,22 @@ Lanza la previsualización nativa del proyecto según su tipo (web-estatica, kin
   * `package_name` (string, opcional): Nombre del paquete Android (requerido para `android-apk`).
 * **Retorno:** `{"status": "SUCCESS/FAIL", "message": "mensaje descriptivo", "project_type": "...", ...}`
 
-## 4. Políticas de Seguridad y Sandboxing (v1.3.0+)
+### `search_code` (v1.4.0+)
+Realiza una búsqueda RAG rápida en base a palabras clave indexadas sobre el código del workspace para evitar que los agentes lean archivos gigantescos completos.
+* **Argumentos:** `{"query": "término de búsqueda o función"}`
+* **Retorno:** `{"status": "SUCCESS", "results": [{"path": "...", "score": int, "snippet": "..."}]}`
+
+## 4. Gestión de Escalabilidad y Contexto (v1.4.0+)
+
+El runtime incluye dos motores dedicados a optimizar el rendimiento y controlar el consumo de memoria del agente:
+
+### 4.1 Compresor de Contexto Activo (`context_compressor.py`)
+Antes de cada ciclo de inferencia, el runner evalúa el volumen del historial del agente en tokens. Si se supera el límite configurado (10,000 tokens), el motor invoca de forma interna y transparente al agente especializado para consolidar la secuencia conversacional anterior en un reporte conciso estructurado, protegiendo la ventana útil del modelo contra la saturación.
+
+### 4.2 Local RAG Engine (`rag_engine.py`)
+Las búsquedas realizadas mediante `search_code` consumen fragmentos optimizados de código fuente limitados a 2000 caracteres como máximo por coincidencia. Esto previene desbordamientos de la ventana de contexto al examinar archivos de código extensos.
+
+## 5. Políticas de Seguridad y Sandboxing (v1.3.0+)
 
 El runtime aplica políticas activas para asegurar la ejecución del agente en entornos de desarrollo abiertos y autoentrenables:
 

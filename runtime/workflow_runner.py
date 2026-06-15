@@ -209,38 +209,18 @@ class WorkflowRunner:
         last_response = ""
         previous_tool_calls = []
         
-        for turn in range(5): # Máximo 5 turnos para prevenir bucles infinitos
-            logger.info(f"Bucle de Agente {agent_id} - Turno {turn + 1}/5")
+        # Compresión de contexto proactiva
+        try:
             try:
-                response = self._call_llm(messages)
-            except Exception as e:
-                logger.error(f"Error llamando al LLM en el turno {turn + 1}: {str(e)}")
-                break
-
-            # Prevenir repeticiones idénticas de respuesta (bucle de alucinación)
-            if response.strip() == last_response.strip():
-                logger.warning(f"Detección de respuesta repetitiva consecutiva del agente {agent_id}. Rompiendo bucle.")
-                break
-
-            messages.append({"role": "assistant", "content": response})
-            last_response = response
-
-            # Buscar llamadas a herramientas usando el parseador robusto
-            tool_call = self._parse_tool_call(response)
-
-            # Si el agente intentó llamar una herramienta (tiene backticks o '{') pero falló el parseo, reportar al LLM para autocorrección
-            if not tool_call and ("```" in response or "{" in response) and "REPORT:" not in response:
-                error_msg = "ERROR: Se detectó un intento de llamada a herramienta pero el formato JSON es inválido. Por favor, asegúrate de responder ÚNICAMENTE con el bloque JSON válido encerrado en triple backticks ```json ... ```."
-                logger.warning(f"Agente {agent_id} produjo JSON inválido. Solicitando corrección.")
-                messages.append({"role": "user", "content": error_msg})
-                continue
-
-            if tool_call and "tool" in tool_call:
-                tool_name = tool_call["tool"]
-                tool_args = tool_call.get("arguments", {})
+                from runtime.context_compressor import ContextCompressor
+            except ImportError:
+                from context_compressor import ContextCompressor
                 
-                # Prevenir bucles de llamadas a la misma herramienta con mismos argumentos
-                call_signature = (tool_name, json.dumps(tool_args, sort_keys=True))
+            compressor = ContextCompressor(token_limit=10000)
+            messages = compressor.compress_history(messages)
+        except Exception as e:
+            logger.warning(f"Error comprimiendo historial de contexto antes de llamada: {str(e)}")
+
         for turn in range(5): # Máximo 5 turnos para prevenir bucles infinitos
             logger.info(f"Bucle de Agente {agent_id} - Turno {turn + 1}/5")
             

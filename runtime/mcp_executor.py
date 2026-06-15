@@ -109,6 +109,25 @@ class McpExecutor:
             f.write(content)
         return {"status": "SUCCESS", "message": f"Archivo escrito exitosamente en {path}"}
 
+    def _tool_search_code(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Realiza una búsqueda RAG rápida de código o archivos en el workspace."""
+        query = args.get("query", "")
+        if not query:
+            return {"status": "FAIL", "error": "Argumento 'query' es obligatorio."}
+            
+        try:
+            # Importación dinámica para evitar acoplamientos circulares
+            try:
+                from runtime.rag_engine import RAGEngine
+            except ImportError:
+                from rag_engine import RAGEngine
+                
+            engine = RAGEngine(self.base_dir)
+            results = engine.search(query)
+            return {"status": "SUCCESS", "results": results}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Error buscando en el índice de código: {str(e)}"}
+
     def _tool_list_dir(self, args: Dict[str, Any]) -> Dict[str, Any]:
         path = self._resolve_path(args.get("path", "."))
         if not os.path.exists(path) or not os.path.isdir(path):
