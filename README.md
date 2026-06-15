@@ -1,351 +1,232 @@
 # 🧠 PsychoSv_503 — AI DevOS
 
-> **Sistema Operativo de Desarrollo con Inteligencia Artificial**
-> Un ecosistema de agentes especializados que trabajan juntos como una agencia de software virtual. Diseña, planifica, construye y valida proyectos completos usando múltiples LLMs coordinados.
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![GitHub Stars](https://img.shields.io/github/stars/Psycho503DevSv/dev-psycho-ai-agency?style=for-the-badge&logo=github)](https://github.com/Psycho503DevSv/dev-psycho-ai-agency/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/Psycho503DevSv/dev-psycho-ai-agency?style=for-the-badge&logo=github)](https://github.com/Psycho503DevSv/dev-psycho-ai-agency/network/members)
+[![Last Commit](https://img.shields.io/github/last-commit/Psycho503DevSv/dev-psycho-ai-agency?style=for-the-badge)](https://github.com/Psycho503DevSv/dev-psycho-ai-agency/commits/main)
+
+> **Un Sistema Operativo de Desarrollo de Software Multi-Agente autónomo, vergas y premium.**
+> Orquesta un equipo de especialistas virtuales que diseñan, planifican, construyen, prueban y previsualizan proyectos de software reales mediante flujos automatizados utilizando la API de NVIDIA NIM y OpenAI.
 
 ---
 
 ## 🤔 ¿Qué es esto?
 
-Imagínate una empresa de desarrollo de software donde **cada empleado es una IA especializada**. Hay un CEO que dirige, un Product Manager que planifica, un Frontend que diseña interfaces, un Backend que construye APIs, un QA que prueba todo y un Security que busca vulnerabilidades.
+**PsychoSv_503 AI DevOS** no es solo una biblioteca de prompts. Es una **agencia de desarrollo de software autónoma y real**. 
 
-**PsychoSv_503** es exactamente eso: un sistema donde tú eres el dueño de la empresa y los agentes de IA son tu equipo completo. Solo les dices qué quieres construir y ellos se organizan solos para hacerlo.
+Cada rol dentro de una empresa tecnológica tradicional está representado por un agente de inteligencia artificial especializado: desde el CEO que lidera y orquesta, pasando por el Product Manager que analiza los requisitos, hasta ingenieros de Frontend, Backend, QA y Ciberseguridad.
 
----
-
-## 🏗️ Arquitectura del Sistema
-
-```
-PsychoSv_503/
-│
-├── 🤖 agents/              → Los "empleados" — instrucciones de cada agente
-│   ├── psycho-ceo/         → El jefe: orquesta y dirige a todos
-│   ├── product-manager/    → Traduce tus ideas a requisitos técnicos
-│   ├── ai-architect/       → Diseña la arquitectura de IA del sistema
-│   ├── frontend/           → Construye interfaces web (HTML, CSS, React)
-│   ├── backend/            → Construye APIs, bases de datos y servidores
-│   ├── devops/             → Despliega y mantiene la infraestructura
-│   ├── qa/                 → Prueba y valida la calidad del código
-│   ├── security/           → Detecta y corrige vulnerabilidades
-│   ├── mcp-architect/      → Diseña la integración con herramientas (MCP)
-│   ├── rag-architect/      → Diseña sistemas de búsqueda y recuperación
-│   ├── context-engineer/   → Optimiza el uso de tokens y contexto
-│   ├── agent-evaluator/    → Evalúa el output de todos los agentes
-│   └── orchestrator/       → Subcoordinador de flujos complejos
-│
-├── ⚙️ config/              → Configuración central del sistema
-│   └── settings.py         → Variables de entorno, rutas y flags
-│
-├── 📚 docs/                → Documentación técnica y reportes
-│
-├── 🧠 memory/              → La "memoria" del sistema
-│   ├── active_context.md   → ¿En qué está trabajando el sistema ahora?
-│   ├── architecture.md     → Decisiones de arquitectura tomadas
-│   ├── decisions.md        → Log de decisiones importantes
-│   ├── requirements.md     → Requisitos del proyecto activo
-│   ├── tasks.md            → Tareas pendientes y en progreso
-│   ├── lessons_learned.md  → Errores del pasado y cómo evitarlos
-│   ├── project_state.json  → Estado actual del proyecto en formato JSON
-│   ├── sessions/           → Logs de cada sesión de trabajo (JSON)
-│   └── patterns/           → Patrones reutilizables aprendidos
-│
-├── 🔌 mcps/                → Servidores MCP (herramientas externas)
-│   ├── core/               → MCPs esenciales (filesystem, git, browser)
-│   ├── community/          → MCPs de la comunidad
-│   └── custom/             → MCPs creados a medida
-│
-├── 📁 projects/            → Directorio de trabajo para cada proyecto
-│
-├── 📋 registry/            → Registros centrales del sistema
-│   ├── agent-registry.json     → Lista y configuración de todos los agentes
-│   ├── workflow-registry.json  → Definición de los flujos de trabajo
-│   ├── mcp-registry.json       → Herramientas habilitadas y permisos
-│   └── tool-registry.json      → Herramientas de Python disponibles
-│
-├── ⚡ runtime/             → El motor de ejecución del sistema
-│   ├── agent_loader.py     → Carga agentes e inyecta memoria en su contexto
-│   ├── memory_engine.py    → Motor de memoria (local JSON + Graphiti opcional)
-│   ├── graphiti_bridge.py  → Puente opcional hacia Neo4j / Graphiti
-│   ├── quality_gate.py     → Validador automático de código generado
-│   └── workflow_runner.py  → Orquestador de flujos multi-agente
-│
-├── 📐 standards/           → Las reglas que todos los agentes deben seguir
-│   ├── constitution.md         → La ley suprema del sistema
-│   ├── coding-standards.md     → Estándares de código
-│   ├── security-standards.md   → Reglas de seguridad
-│   ├── documentation-standards.md → Cómo documentar
-│   ├── communication-standards.md → Cómo se comunican los agentes
-│   └── mcp-governance.md       → Qué herramientas puede usar cada agente
-│
-├── 📦 templates/           → Plantillas base para crear nuevos componentes
-│   ├── agent-template/     → Base para crear un nuevo agente
-│   ├── mcp-template/       → Base para integrar un nuevo MCP
-│   └── workflow-template/  → Base para definir un nuevo workflow
-│
-├── 🛠️ tools/               → Scripts de utilidad para el sistema
-│   ├── health-check.py         → Verifica que el sistema esté sano
-│   ├── mcp_diagnostics.py      → Diagnóstico de herramientas MCP
-│   ├── mcp_installer.py        → Instala MCPs nuevos
-│   └── registry_schema_validator.py → Valida los registros JSON
-│
-└── 🔄 workflows/           → Definiciones de los flujos de trabajo
-    ├── project-discovery.md    → Flujo: descubrir y entender requisitos
-    ├── project-planning.md     → Flujo: planificar la arquitectura
-    ├── project-implementation.md → Flujo: construir el proyecto
-    ├── project-review.md       → Flujo: revisar y validar
-    ├── project-maintenance.md  → Flujo: mantener y corregir bugs
-    └── project-release.md      → Flujo: lanzar a producción
-```
+Tú actúas como el dueño del producto. Defines tu idea en la entrevista interactiva inicial y los agentes colaboran en paralelo, escriben código de producción, realizan auditorías de seguridad, y ejecutan herramientas locales gracias al protocolo **MCP (Model Context Protocol)** y un ejecutor local robusto.
 
 ---
 
-## 🤖 Los Agentes y sus Roles
+## 🚀 Características Principales
 
-| Nivel | Agente | Rol | Acceso a Memoria |
-|-------|--------|-----|-----------------|
-| 👑 1 | `psycho-ceo` | CEO y Orquestador Central | Total |
-| 🎯 2 | `agent-evaluator` | Control de Calidad | Lectura/Escritura |
-| 🎯 2 | `product-manager` | Gestión de Producto | Lectura/Escritura |
-| 💻 3 | `frontend` | Ingeniería Frontend | Lectura/Escritura |
-| 🔧 3 | `backend` | Ingeniería Backend | Lectura/Escritura |
-| 🚀 3 | `devops` | DevOps e Infraestructura | Lectura/Escritura |
-| 🧪 3 | `qa` | Control de Calidad | Lectura/Escritura |
-| 🔒 3 | `security` | Seguridad | Lectura/Escritura |
-| 🧱 3 | `ai-architect` | Arquitectura de IA | Lectura/Escritura |
-| 🔌 3 | `mcp-architect` | Arquitectura MCP | Lectura/Escritura |
-| 🔍 3 | `rag-architect` | Arquitectura RAG | Lectura/Escritura |
-| 🎛️ 3 | `context-engineer` | Ingeniería de Contexto | Lectura/Escritura |
+* **Bucle Real de Agentes (Real Agent Loop):** Ejecución de inferencia dinámica usando APIs HTTP directas sin intermediarios. Prioridad nativa para la API de **NVIDIA NIM** (`meta/llama-3.1-8b-instruct`) con fallback a **OpenAI** (`gpt-4o-mini`).
+* **Tipos de Proyecto Nativos:** Soporte estructurado para 5 tipos de proyectos mediante un registro unificado:
+  * 🌐 `web-estatica`: HTML/CSS/JS puro y animaciones.
+  * ⚛️ `web-framework`: React, Vue o Vite.
+  * 📱 `android-apk`: Compilación con Gradle y despliegue directo en emuladores/dispositivos físicos.
+  * 🧩 `chrome-extension`: Extensiones listas para ser cargadas localmente.
+  * 🎭 `kinetic-typography`: Animaciones de tipografía cinética interactivas (GSAP, Three.js).
+* **Previsualización Nativa Automatizada (`preview_project`):** Herramienta MCP capaz de levantar servidores HTTP, ejecutar scripts de desarrollo (`npm run dev`), instalar y reemplazar APKs sin acumular duplicados (`adb install -r`), y arrancar instancias de Chrome cargando extensiones al instante.
+* **Entrevista de Diseño Interactiva (`ask_user`):** Los agentes detienen la ejecución para interrogar interactivamente al usuario sobre tipografías, colores, iconos, animaciones o tipo de proyecto, asegurando que el resultado cumpla con la visión del cliente.
+* **Filtros y Seguridad de Contexto:** Protección contra inyección de prompts y Path Traversal guardrails en herramientas del filesystem para evitar que los agentes modifiquen archivos fuera del workspace.
+* **Quality Gate Integrado:** Validación estática automática de la sintaxis Python y estructura del proyecto antes de completar cualquier sprint de desarrollo.
 
 ---
 
-## 🔄 Flujos de Trabajo (Workflows)
+## 📦 Instalación paso a paso
 
-Un **workflow** es una secuencia de agentes que trabajan en orden para completar una tarea completa. El sistema tiene 6 flujos predefinidos:
-
-| ID | Nombre | ¿Cuándo se usa? | Agentes involucrados |
-|----|--------|-----------------|---------------------|
-| `wf-discovery` | Project Discovery | Al inicio, cuando tienes una idea | CEO → Product Manager |
-| `wf-planning` | Project Planning | Cuando los requisitos están listos | CEO → AI Architect → PM |
-| `wf-implementation` | Project Implementation | Cuando el plan está aprobado | CEO → Frontend → Backend → Evaluator |
-| `wf-review` | Project Review | Al terminar una tarea | CEO → QA → Security → Evaluator |
-| `wf-maintenance` | Project Maintenance | Cuando hay un bug | CEO → Backend → QA → DevOps |
-| `wf-build-project` | Build Full Project | Para construir desde cero | CEO → PM → Architect → Frontend → Backend → Evaluator |
-
----
-
-## 🧠 Sistema de Memoria
-
-El sistema tiene memoria persistente para no olvidar nada entre sesiones.
-
-### ¿Cómo funciona?
-
-1. Cuando un agente trabaja, **guarda lo que hizo** en `memory/sessions/` como archivos JSON.
-2. Cuando un agente va a trabajar, el **`agent_loader.py` lee solo los archivos de memoria relevantes** para su rol (no toda la memoria, para no desperdiciar tokens).
-3. Los **patrones aprendidos** se promueven a `memory/patterns/` para que todos los agentes los usen en el futuro.
-
-### Archivos de Memoria Compartida
-
-| Archivo | ¿Qué contiene? |
-|---------|----------------|
-| `active_context.md` | Lo que está haciendo el sistema ahora mismo |
-| `architecture.md` | Decisiones de arquitectura del proyecto actual |
-| `decisions.md` | Log de decisiones importantes tomadas |
-| `requirements.md` | Requisitos del proyecto activo |
-| `tasks.md` | Lista de tareas pendientes y completadas |
-| `lessons_learned.md` | Errores del pasado para no repetirlos |
-| `project_state.json` | Estado completo del proyecto en JSON |
-
-### Modos de Memoria
-
-#### 🗂️ Modo Local — **ACTIVO POR DEFECTO, no necesitas configurar nada**
-Guarda todo como archivos JSON en tu disco duro. **100% privado, gratuito y sin internet.**
-No necesitas crear ningún archivo `.env`. El sistema arranca en este modo automáticamente.
-
-#### 🕸️ Modo Graphiti / Neo4j — ⚠️ OPCIONAL y AVANZADO (no recomendado para empezar)
-> ⚠️ **Este modo está DESACTIVADO por defecto.** Solo configúralo si sabes lo que haces. Requiere instalar Neo4j y tener una API Key de OpenAI.
-
-Si en el futuro quisieras activarlo, creas un archivo `.env` en la raíz **con este valor en `true`**:
-```ini
-# SOLO si quieres activar el modo grafo (no es necesario)
-USE_GRAPHITI=true
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=tu_contraseña
-OPENAI_API_KEY=tu_clave
-```
-
----
-
-## ⚡ El Motor de Ejecución (Runtime)
-
-El corazón del sistema son 4 archivos Python en la carpeta `runtime/`:
-
-### `agent_loader.py`
-Carga a los agentes desde el registro y construye su contexto de trabajo. Antes de ejecutar un agente, **inyecta automáticamente en su prompt solo la memoria relevante** para su rol, reduciendo el consumo de tokens al mínimo.
-
-### `memory_engine.py`
-Motor de persistencia de memoria. Soporta dos modos:
-- **Local:** Guarda y recupera datos en archivos JSON en `memory/sessions/`.
-- **Graphiti:** Si está habilitado, también sincroniza con una base de datos de grafos.
-
-### `quality_gate.py`
-Validador automático que corre antes de entregar cualquier código generado. Verifica:
-- ✅ Sintaxis correcta de todos los archivos `.py`
-- ✅ Presencia de archivos obligatorios (`README.md`, `requirements.txt`)
-
-### `workflow_runner.py`
-El orquestador de flujos. Recibe un `workflow_id` y un nombre de proyecto, carga los agentes en orden, ejecuta cada paso y registra el resultado en memoria.
-
----
-
-## 📐 La Constitución del Sistema
-
-El archivo `standards/constitution.md` es la **ley suprema** que todos los agentes deben obedecer. Define:
-
-1. **Prioridad del Usuario:** Todo desarrollo aporta valor real.
-2. **Integridad del Sistema:** Ninguna acción compromete la estabilidad.
-3. **Persistencia del Conocimiento:** Las decisiones se documentan siempre.
-4. **Claridad Lingüística:** El español es el idioma oficial del sistema.
-
-### Jerarquía de Autoridad (de mayor a menor)
-1. 📜 Constitución
-2. 🔒 Estándares de Seguridad
-3. 🏗️ Estándares de Arquitectura
-4. 📋 Requisitos del Proyecto
-5. 🤖 Instrucciones del Agente
-
----
-
-## 🔌 Herramientas (MCPs)
-
-Los **Model Context Protocols (MCPs)** son las herramientas que los agentes pueden usar para interactuar con el mundo real:
-
-| MCP | Tipo | ¿Para qué sirve? |
-|-----|------|-----------------|
-| `filesystem` | Core | Leer y escribir archivos en disco |
-| `git` | Core | Hacer commits y pushes a GitHub |
-| `browser` | Core | Navegar y extraer información de páginas web |
-| `memory-layer` | Custom | Leer y escribir en el sistema de memoria |
-| `docker` | Infrastructure | Gestionar contenedores Docker |
-| `fetch` | Web | Hacer peticiones HTTP / Web scraping |
-| `playwright` | Browser | Automatización de navegadores para testing |
-
----
-
-## 🚀 Instalación y Uso
-
-### 1. Clonar el repositorio
+### 1. Clonar el Repositorio
 ```bash
 git clone https://github.com/Psycho503DevSv/dev-psycho-ai-agency.git
 cd dev-psycho-ai-agency
 ```
 
-### 2. Crear entorno virtual e instalar dependencias
+### 2. Crear y Activar el Entorno Virtual
 ```bash
 python -m venv .venv
 
-# Windows
-.venv\Scripts\activate
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
 
 # Linux / Mac
 source .venv/bin/activate
+```
 
+### 3. Instalar Dependencias
+```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configurar Claves de API (.env)
+### 4. Configurar Variables de Entorno (`.env`)
+Para que los agentes tengan autonomía real de ejecución e inferencia, crea un archivo `.env` en la raíz del proyecto. El motor prioriza NVIDIA NIM para un procesamiento rápido y potente:
 
-Para que el bucle de agentes funcione de manera autónoma y real (utilizando modelos de lenguaje reales), debes configurar un archivo `.env` en la raíz del proyecto. El sistema soporta dos modos de ejecución:
-
-* **Modo Real (NVIDIA NIM o OpenAI):** Si configuras una clave en el archivo `.env`, los agentes realizarán llamadas de razonamiento y uso de herramientas reales en cada paso.
-* **Modo Simulación:** Si no configuras ninguna clave de API, el sistema correrá los pasos en modo simulación de manera gratuita sin consumir créditos ni tokens.
-
-Crea un archivo `.env` con la siguiente estructura:
 ```env
-# Clave del API gratuita de NVIDIA NIM (Recomendada y prioritaria si se define)
+# Clave API de NVIDIA NIM (Recomendada - Prioritaria)
 # Consíguela gratis en: https://build.nvidia.com/
 NVIDIA_API_KEY=nvapi-tu_clave_aquí
 
-# Clave de OpenAI (Opcional, de compatibilidad)
-OPENAI_API_KEY=
-```
+# Clave API de OpenAI (Opcional - Fallback)
+OPENAI_API_KEY=sk-proj-tu_clave_aquí
 
-### 4. Ejecutar un workflow
+# Configuración de Grafo de Memoria Opcional (Falso por defecto)
+USE_GRAPHITI=false
+```
+*Si no configuras ninguna clave de API, el sistema se ejecutará en **Modo Simulación** de forma gratuita para fines de prueba.*
+
+---
+
+## 💻 Cómo Usarlo
+
+Inicia cualquier flujo de trabajo indicando el `workflow_id` y el nombre de tu proyecto. El runner se encargará de orquestar el ciclo completo de desarrollo:
+
 ```bash
 python -m runtime.workflow_runner [workflow_id] [nombre_proyecto]
 ```
 
-**Ejemplos:**
-```bash
-# Descubrir requisitos de un nuevo proyecto
-python -m runtime.workflow_runner wf-discovery mi-app-web
+### Ejemplos Rápidos:
 
-# Construir un proyecto completo desde cero
-python -m runtime.workflow_runner wf-build-project mi-saas-app
+* **Descubrimiento y Entrevista Inicial:**
+  ```bash
+  python -m runtime.workflow_runner wf-discovery mi-proyecto-web
+  ```
+* **Construcción Completa:**
+  ```bash
+  python -m runtime.workflow_runner wf-build-project mi-dashboard
+  ```
+* **Auditoría de Calidad y Seguridad:**
+  ```bash
+  python -m runtime.workflow_runner wf-review mi-app-android
+  ```
 
-# Revisar y validar el código de un proyecto
-python -m runtime.workflow_runner wf-review mi-app-web
+---
+
+## 🏗️ Arquitectura del Sistema
+
+El workspace se estructura de la siguiente manera:
+
 ```
-
-### 4. Verificar la salud del sistema
-```bash
-python tools/health-check.py
-```
-
-### 5. Correr las pruebas unitarias
-```bash
-# Ejecutar todas las pruebas con pytest
-pytest
+PsychoSv_503/
+│
+├── 🤖 agents/              → Definición e instrucciones operativas de los agentes
+│   ├── psycho-ceo/         → El jefe central: entrevista al usuario y orquesta tareas
+│   ├── product-manager/    → Gestiona requisitos y traduce ideas
+│   ├── frontend/           → Desarrollo de interfaces visuales e interacciones
+│   ├── backend/            → Lógica de servidor, base de datos y APIs
+│   ├── qa/                 → Pruebas funcionales e integración
+│   ├── security/           → Auditoría de seguridad y dependencias
+│   ├── ai-architect/       → Diseña integraciones de inteligencia artificial
+│   ├── mcp-architect/      → Diseño y control de herramientas locales
+│   └── ...                 
+│
+├── ⚙️ config/              → Parámetros del sistema y settings
+│   └── settings.py         → Carga de variables de entorno y paths del workspace
+│
+├── 🧠 memory/              → Memoria compartida y persistente
+│   ├── active_context.md   → Contexto de trabajo activo del sprint
+│   ├── architecture.md     → Registro de decisiones tecnológicas
+│   ├── decisions.md        → Historial de elecciones críticas
+│   ├── requirements.md     → Requisitos técnicos acordados
+│   ├── tasks.md            → Lista de control del proyecto (TODO)
+│   ├── lessons_learned.md  → Lecciones aprendidas para evitar regresiones
+│   └── sessions/           → Historial de ejecuciones en JSON
+│
+├── 📋 registry/            → Registros JSON de configuración de la agencia
+│   ├── agent-registry.json     → Registro de agentes activos y sus capacidades
+│   ├── project-types-registry.json → Registro nativo de tipos de proyectos (NUEVO)
+│   ├── mcp-registry.json       → Permisos de herramientas para cada agente
+│   └── workflow-registry.json  → Flujos de trabajo y orden de ejecución
+│
+├── ⚡ runtime/             → El motor de ejecución (Runtime Core)
+│   ├── agent_loader.py     → Cargador de agentes e inyector de contexto
+│   ├── memory_engine.py    → Manejo de persistencia local (JSON)
+│   ├── mcp_executor.py     → Ejecutor autónomo de herramientas MCP (filesystem, cmd, previews)
+│   └── workflow_runner.py  → Controlador de bucle interactivo de agentes
+│
+└── 📐 standards/           → Normas, políticas y leyes internas de la agencia
+    ├── constitution.md         → Ley suprema que gobierna a los agentes
+    └── coding-standards.md     → Estándares de calidad de código
 ```
 
 ---
 
-## 🛡️ Reglas de Oro (Cómo trabajan los agentes)
+## 🤖 Agentes Principales y Jerarquía
 
-### Regla #1 — No Immediate Coding 🧠
-Ningún agente escribe código inmediatamente. El flujo siempre es:
-1. Análisis de requisitos
-2. Revisión de documentación existente
-3. Validación de arquitectura
-4. Detección de riesgos
-5. Planificación de implementación
-6. Código y ejecución
-
-### Regla #2 — Document Decisions 📝
-Toda decisión arquitectónica o de diseño crítica debe quedar documentada en `memory/decisions.md`.
-
-### Regla #3 — Document Changes 🔄
-Cada modificación al código debe actualizar la documentación correspondiente.
-
-### Regla #4 — Maintainability First 🛠️
-Cada funcionalidad se implementa pensando en la mantenibilidad futura. Código limpio por encima de código rápido.
+| Nivel | Agente | Rol y Responsabilidad | Acceso a Memoria |
+| :--- | :--- | :--- | :--- |
+| 👑 **Nivel 1** | `psycho-ceo` | Entrevista inicial, orquestación central y previsualización. | Total (Lectura/Escritura) |
+| 🎯 **Nivel 2** | `agent-evaluator` | Validador de consistencia y aprobación de entregas. | Lectura/Escritura |
+| 🎯 **Nivel 2** | `product-manager` | Estructuración de tareas y especificaciones funcionales. | Lectura/Escritura |
+| 💻 **Nivel 3** | `frontend` | Creación de interfaces de usuario y animaciones. | Lectura/Escritura |
+| 🔧 **Nivel 3** | `backend` | Arquitectura de datos, lógica de negocio y APIs. | Lectura/Escritura |
+| 🚀 **Nivel 3** | `devops` | Scripting de compilación, empaquetado y ADB. | Lectura/Escritura |
+| 🔒 **Nivel 3** | `security` | Auditoría de tokens, vulnerabilidades y prompts. | Lectura/Escritura |
 
 ---
 
-## 🧪 Compatibilidad con IDEs y LLMs
+## 🔄 Flujos de Trabajo (Workflows)
 
-Este sistema está diseñado para funcionar con cualquier entorno de desarrollo moderno que soporte agentes IA:
+Los workflows coordinan a los agentes secuencialmente para cumplir objetivos globales:
 
-**IDEs compatibles:**
-- Antigravity IDE ✅
-- VS Code + GitHub Copilot ✅
-- OpenCode ✅
-- Cursor ✅
+| ID del Workflow | Nombre | Propósito | Secuencia de Agentes |
+| :--- | :--- | :--- | :--- |
+| `wf-discovery` | Descubrimiento | Capturar la visión del cliente y crear requisitos. | `psycho-ceo` → `product-manager` |
+| `wf-planning` | Planificación | Diseñar la estructura del software y dependencias. | `psycho-ceo` → `ai-architect` → `product-manager` |
+| `wf-implementation`| Implementación | Escribir código y previsualizar de forma interactiva. | `psycho-ceo` → `frontend` → `backend` → `agent-evaluator` |
+| `wf-review` | Revisión | Auditoría técnica profunda antes de la entrega. | `psycho-ceo` → `qa` → `security` → `agent-evaluator` |
+| `wf-build-project` | Construcción Completa | Desarrollo completo de extremo a extremo. | `psycho-ceo` → `product-manager` → `ai-architect` → `frontend` → `backend` → `agent-evaluator` |
 
-**Modelos LLM compatibles:**
-- Google Gemini ✅
-- Anthropic Claude ✅
-- OpenAI GPT ✅
-- xAI Grok ✅
-- Alibaba Qwen ✅
+---
+
+## 🧠 Sistema de Memoria Compartida
+
+El sistema utiliza un modelo de **memoria híbrida** que mantiene la coherencia cognitiva de los agentes en todo momento:
+
+1. **Memoria de Corto Plazo:** Los detalles del turno se mantienen en los mensajes de la sesión del agente.
+2. **Memoria de Largo Plazo Local:** Los directorios `memory/sessions/` guardan el historial en archivos JSON.
+3. **Memoria de Contexto Central:** Archivos markdown dinámicos (`requirements.md`, `tasks.md`, `active_context.md`) que los agentes leen obligatoriamente antes de ejecutar cualquier acción.
+4. **Auto-Learning:** Al final de cada workflow, el subsistema `AutoLearner` extrae errores comunes del Quality Gate y actualiza `memory/lessons_learned.md` de forma autónoma para evitar que los agentes cometan los mismos errores.
+
+---
+
+## 🛠️ Tecnologías Usadas (Tech Stack)
+
+* **Lenguaje:** Python 3.10+
+* **LLMs & Inferencia:** NVIDIA NIM (Llama 3.1 8B Instruct) / OpenAI API (GPT-4o mini)
+* **Entorno de Visualización:**
+  * Servidores Web integrados (Python HTTP Server)
+  * Node.js & Vite (para aplicaciones SPA React/Vue)
+  * Android Debug Bridge (ADB) + Gradle (para Android APKs)
+  * Google Chrome CLI (para extensiones de navegador y previsualización automatizada)
+* **Testing:** Pytest & Unittest Mocks
+
+---
+
+## 🗺️ Roadmap / Próximos Pasos
+
+* [ ] Integración nativa de bases de datos vectoriales locales para RAG de documentación.
+* [ ] Soporte para emuladores Android basados en Docker en flujos de DevOps.
+* [ ] Generación automática de pruebas unitarias por el agente QA mediante Playwright.
+* [ ] Interfaz gráfica web interactiva (UI) para la monitorización de los agentes en tiempo real.
+
+---
+
+## 🤝 Contribuir
+
+1. Haz un Fork del proyecto.
+2. Crea una rama con tu nueva característica: `git checkout -b feature/nueva-funcion`.
+3. Asegúrate de pasar todas las pruebas antes de enviar: `pytest`.
+4. Envía un Pull Request detallando los cambios.
 
 ---
 
 ## 📄 Licencia
 
-Este proyecto es de código abierto bajo la **Licencia MIT**.
-Puedes usarlo, modificarlo y distribuirlo libremente.
+Este proyecto está bajo la Licencia **MIT**. Consulta el archivo `LICENSE` para obtener más información.
 
 ---
 
-*PsychoSv_503 — Construido con 🔥 por [@Psycho503DevSv](https://github.com/Psycho503DevSv)*
+### Made with ❤️ by [Psycho503](https://github.com/Psycho503DevSv)
