@@ -3,8 +3,9 @@ import os
 import sys
 
 # Ajustar path para importar desde runtime
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../runtime')))
-from agent_loader import AgentLoader
+from runtime.agent_loader import AgentLoader
 
 class TestAgentLoader(unittest.TestCase):
     def setUp(self):

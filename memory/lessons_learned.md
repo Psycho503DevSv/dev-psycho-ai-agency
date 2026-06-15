@@ -39,3 +39,8 @@
 * Revisa la configuración del Workflow (wf-qg) para asegurarte de que incluya la validación de los archivos obligatorios.
 * No olvides agregar un archivo requirements.txt con las dependencias necesarias.
 * Verifica que todos los archivos requeridos estén presentes en el proyecto.
+* Verifica la integridad del proyecto antes de enviarlo a QualityGate.
+* Verifica que todos los archivos requeridos estén presentes en el proyecto antes de enviarlo a QualityGate.
+* Revisa la lista de errores de QualityGate antes de considerar el workflow como finalizado.
+* Verifica que todos los archivos obligatorios estén presentes antes de ejecutar el Workflow wf-qg.
+* Verifica la presencia de archivos obligatorios (README.md y requirements.txt) en el workflow.
