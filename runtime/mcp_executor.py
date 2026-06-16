@@ -389,47 +389,67 @@ class McpExecutor:
     # --- Herramientas de Interacción Humana ---
 
     def _tool_ask_user(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        question = args.get("question", "")
+        # Accept multiple possible arg names that LLMs tend to use
+        question = (
+            args.get("question") or
+            args.get("prompt") or
+            args.get("pregunta") or
+            args.get("message") or
+            args.get("text") or
+            ""
+        )
         if not question:
             return {"status": "FAIL", "error": "La pregunta no puede estar vacía."}
-            
-        print("\n" + "="*50)
-        print(f"💬 PREGUNTA DEL AGENTE:\n{question}")
-        print("="*50)
-        
+
         import threading
+        import sys as _sys
         from runtime.dashboard import (
-            set_pending_question, 
-            clear_pending_question, 
-            wait_for_response, 
+            set_pending_question,
+            clear_pending_question,
+            wait_for_response,
             get_web_response,
             _question_event
         )
-        
+
         set_pending_question(question)
-        
+        _question_event.clear()
+
+        # Only try console input if we have an interactive TTY
         console_res = []
-        def read_console():
-            try:
-                val = input("Respuesta (o responde vía Web UI) > ")
-                console_res.append(val)
-                _question_event.set()
-            except Exception:
-                pass
-                
-        t = threading.Thread(target=read_console, daemon=True)
-        t.start()
-        
-        _question_event.wait()
+        is_tty = _sys.stdin is not None and hasattr(_sys.stdin, 'isatty') and _sys.stdin.isatty()
+
+        if is_tty:
+            print("\n" + "="*50)
+            print(f"PREGUNTA DEL AGENTE:\n{question}")
+            print("="*50)
+
+            def read_console():
+                try:
+                    val = input("Respuesta (o responde via Web UI en http://localhost:8050) > ")
+                    console_res.append(val)
+                    _question_event.set()
+                except Exception:
+                    pass
+
+            t = threading.Thread(target=read_console, daemon=True)
+            t.start()
+
+        # Wait up to 5 minutes for a response (console OR web dashboard)
+        logger.info(f"[ask_user] Esperando respuesta humana via dashboard en http://localhost:8050 ...")
+        responded = _question_event.wait(timeout=300)
         clear_pending_question()
-        
+
+        if not responded:
+            return {"status": "FAIL", "error": "Tiempo de espera agotado (5 min). No se recibió respuesta del usuario."}
+
         if console_res:
             return {"status": "SUCCESS", "response": console_res[0]}
-        else:
-            web_val = get_web_response()
-            if web_val is not None:
-                return {"status": "SUCCESS", "response": web_val}
-            return {"status": "FAIL", "error": "No se recibió respuesta."}
+
+        web_val = get_web_response()
+        if web_val is not None:
+            return {"status": "SUCCESS", "response": web_val}
+
+        return {"status": "FAIL", "error": "No se recibio respuesta valida."}
 
     # --- Herramientas de Previsualización Nativa ---
 

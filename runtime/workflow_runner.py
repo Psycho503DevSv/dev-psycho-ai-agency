@@ -14,6 +14,13 @@ if sys.platform == "win32":
 
 from config import settings
 
+try:
+    from runtime.dashboard import start_dashboard_server, update_dashboard_state, add_dashboard_log
+except ImportError:
+    def start_dashboard_server() -> None: pass
+    def update_dashboard_state(state: Dict[str, Any]) -> None: pass
+    def add_dashboard_log(log: str) -> None: pass
+
 
 from runtime.logger import logger
 
@@ -33,7 +40,7 @@ except ImportError:
 
 
 class WorkflowRunner:
-    def __init__(self, registry_path: str = None):
+    def __init__(self, registry_path: Optional[str] = None):
         self.registry_path = registry_path or settings.WORKFLOW_REGISTRY
         self.agent_loader = AgentLoader()
         self.memory = MemoryEngine()
@@ -209,7 +216,9 @@ class WorkflowRunner:
 
         # Si salimos de los bucles sin retornar, todos fallaron
         logger.error(f"Fallo definitivo de todos los proveedores de LLM configurados.")
-        raise last_exception
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("Fallo definitivo de todos los proveedores de LLM configurados.")
 
 
     def _parse_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
@@ -385,7 +394,10 @@ class WorkflowRunner:
                     add_dashboard_log(f"[{agent_id}] Ejecutando herramienta {tool_name} con args: {json.dumps(tool_args)}")
                 except Exception:
                     pass
-                result = self.mcp_executor.execute_tool(tool_name, tool_args, agent_role=context.get("role"))
+                agent_role = context.get("role")
+                if not isinstance(agent_role, str):
+                    agent_role = "agent"
+                result = self.mcp_executor.execute_tool(tool_name, tool_args, agent_role=agent_role)
                 logger.info(f"Resultado de herramienta {tool_name}: {result['status']}")
                 try:
                     add_dashboard_log(f"[{agent_id}] Resultado {tool_name}: {result['status']}")
@@ -473,6 +485,13 @@ class WorkflowRunner:
             
             try:
                 context = self.agent_loader.get_agent_context(agent_id)
+                if not context:
+                    error_msg = f"No se pudo cargar el contexto para el agente {agent_id}"
+                    logger.error(error_msg)
+                    self.status = "FAILED"
+                    update_dashboard_state({"status": "FAILED"})
+                    add_dashboard_log(error_msg)
+                    return {"status": "FAIL", "error": error_msg, "completed_steps": steps_execution}
                 logger.info(f"Ejecutando paso con: {agent_id} ({context['role']})")
                 
                 # Ejecutar Agent Loop real si hay claves configuradas
