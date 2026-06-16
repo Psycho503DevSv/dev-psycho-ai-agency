@@ -114,6 +114,21 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
     def do_GET(self):
+        if self.path in ("/data/fondo.webp", "/fondo.webp"):
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            file_path = os.path.join(base_dir, "data", "fondo.webp")
+            if os.path.exists(file_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "image/webp")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                with open(file_path, "rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         if self.path == "/api/state":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -138,19 +153,19 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PsychoSv_503 AI DevOS - Command Center</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>PsychoSv_503 AI DevOS - Cyberpunk Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Orbitron:wght@600;800;900&family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #080c14;
-            --card-bg: #111827;
+            --bg-color: transparent;
+            --card-bg: rgba(255, 255, 255, 0.05);
             --text-color: #f3f4f6;
-            --primary: #6366f1;
-            --primary-glow: rgba(99, 102, 241, 0.4);
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --border-color: #1f2937;
+            --primary: #9d00ff;
+            --cyan: #00f0ff;
+            --magenta: #ff007f;
+            --toxic-green: #39ff14;
+            --blood-red: #ff0033;
+            --border-color: rgba(0, 240, 255, 0.35);
         }
 
         * {
@@ -160,7 +175,11 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         }
 
         body {
-            background-color: var(--bg-color);
+            background-color: #030305;
+            background-image: url('/data/fondo.webp');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
             color: var(--text-color);
             font-family: 'Inter', sans-serif;
             padding: 24px;
@@ -170,38 +189,45 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 20px;
+            border-bottom: 2px solid var(--magenta);
+            text-shadow: 0 0 10px rgba(255, 0, 127, 0.3);
+            background: rgba(12, 6, 24, 0.22);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 16px 20px;
+            border-radius: 12px;
             margin-bottom: 24px;
         }
 
         h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            background: linear-gradient(to right, #818cf8, #c084fc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-family: 'Permanent Marker', cursive;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            text-shadow: 2px 2px 0px var(--magenta), -2px -2px 0px #000;
         }
 
         .status-badge {
-            padding: 8px 16px;
-            border-radius: 30px;
-            font-weight: 700;
-            font-size: 0.9rem;
+            font-family: 'Orbitron', sans-serif;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: 900;
+            font-size: 1rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            box-shadow: 0 0 10px var(--primary-glow);
+            letter-spacing: 0.1em;
+            transform: skewX(-10deg);
+            box-shadow: 0 0 15px var(--border-color);
         }
 
-        .status-idle { background-color: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid #6366f1; }
-        .status-running { background-color: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #10b981; animation: pulse 2s infinite; }
-        .status-failed { background-color: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #ef4444; }
-        .status-completed { background-color: rgba(16, 185, 129, 0.25); color: #10b981; border: 1px solid #10b981; }
+        .status-idle { background-color: rgba(157, 0, 255, 0.2); color: var(--primary); border: 2px solid var(--primary); box-shadow: 0 0 15px rgba(157, 0, 255, 0.4); }
+        .status-running { background-color: rgba(0, 240, 255, 0.2); color: var(--cyan); border: 2px solid var(--cyan); box-shadow: 0 0 20px rgba(0, 240, 255, 0.6); animation: pulse 2s infinite; }
+        .status-failed { background-color: rgba(255, 0, 51, 0.2); color: var(--blood-red); border: 2px solid var(--blood-red); box-shadow: 0 0 20px rgba(255, 0, 51, 0.6); }
+        .status-completed { background-color: rgba(57, 255, 20, 0.2); color: var(--toxic-green); border: 2px solid var(--toxic-green); box-shadow: 0 0 20px rgba(57, 255, 20, 0.6); }
 
         @keyframes pulse {
-            0% { opacity: 0.6; box-shadow: 0 0 5px rgba(16, 185, 129, 0.2); }
-            50% { opacity: 1; box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); }
-            100% { opacity: 0.6; box-shadow: 0 0 5px rgba(16, 185, 129, 0.2); }
+            0% { opacity: 0.7; box-shadow: 0 0 10px rgba(0, 240, 255, 0.3); }
+            50% { opacity: 1; box-shadow: 0 0 25px rgba(0, 240, 255, 0.7); }
+            100% { opacity: 0.7; box-shadow: 0 0 10px rgba(0, 240, 255, 0.3); }
         }
 
         .grid {
@@ -212,42 +238,81 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         }
 
         .card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
+            background: rgba(12, 6, 24, 0.22);
+            backdrop-filter: blur(8px) saturate(160%);
+            -webkit-backdrop-filter: blur(8px) saturate(160%);
+            border: 1px solid rgba(0, 240, 255, 0.35);
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
+            box-shadow:
+                0 0 0 0.5px rgba(255,255,255,0.05) inset,
+                0 8px 32px rgba(0, 0, 0, 0.2),
+                0 0 15px rgba(0, 240, 255, 0.06);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.35s ease;
+        }
+
+        /* Cyberpunk corner decorations */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 12px;
+            height: 12px;
+            border-top: 3px solid var(--magenta);
+            border-left: 3px solid var(--magenta);
+        }
+        .card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            border-bottom: 3px solid var(--cyan);
+            border-right: 3px solid var(--cyan);
         }
 
         .card:hover {
-            transform: translateY(-4px);
-            border-color: var(--primary);
-            box-shadow: 0 12px 20px -3px rgba(99, 102, 241, 0.15);
+            transform: scale(1.01) translateY(-3px);
+            border-color: var(--cyan);
+            background: rgba(22, 10, 45, 0.75);
+            box-shadow:
+                0 0 25px rgba(0, 240, 255, 0.4),
+                0 0 60px rgba(157, 0, 255, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
         .card h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
             font-size: 1.25rem;
             margin-bottom: 20px;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 2px solid var(--magenta);
             padding-bottom: 10px;
-            color: #9ca3af;
-            font-weight: 600;
+            color: var(--cyan) !important;
+            text-shadow: 0 0 5px rgba(0, 240, 255, 0.3);
         }
 
         .metric {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--text-color);
-            background: linear-gradient(to right, #34d399, #60a5fa);
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 2.6rem;
+            color: var(--toxic-green);
+            background: linear-gradient(to right, var(--toxic-green), var(--cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.3);
         }
 
         .metric-sub {
             font-size: 0.85rem;
             color: #9ca3af;
             margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .info-row {
@@ -257,38 +322,44 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             font-size: 0.95rem;
         }
 
-        .info-label { color: #9ca3af; }
-        .info-value { font-weight: 600; color: #f3f4f6; }
+        .info-label { color: #9ca3af; font-family: 'Orbitron', sans-serif; font-size: 0.85rem; }
+        .info-value { font-weight: 600; color: var(--cyan); font-family: 'Share Tech Mono', monospace; font-size: 1.05rem; }
 
         .terminal-card {
             grid-column: span 2;
         }
 
         .terminal {
-            background-color: #030712;
-            border: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 0, 127, 0.5);
             border-radius: 12px;
             padding: 20px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.875rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
             height: 350px;
             overflow-y: auto;
             white-space: pre-wrap;
-            color: #d1d5db;
-            line-height: 1.6;
+            color: #ffffff;
+            text-shadow: 0 0 4px rgba(0, 240, 255, 0.4);
+            line-height: 1.7;
+            box-shadow: inset 0 0 30px rgba(157, 0, 255, 0.06);
         }
 
         .alert-box {
-            background-color: rgba(239, 68, 68, 0.08);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            border-radius: 10px;
+            background-color: rgba(255, 0, 51, 0.1);
+            border: 1.5px solid var(--blood-red);
+            border-radius: 4px;
             padding: 12px 18px;
-            color: #f87171;
+            color: #ff3355;
             margin-top: 12px;
             font-size: 0.9rem;
             display: flex;
             flex-direction: column;
             gap: 6px;
+            font-family: 'Share Tech Mono', monospace;
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(255, 0, 51, 0.4);
+            box-shadow: 0 0 15px rgba(255, 0, 51, 0.2);
         }
 
         table {
@@ -303,26 +374,29 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             border-bottom: 1px solid var(--border-color);
         }
 
-        th { color: #9ca3af; font-weight: 600; }
+        th { color: var(--magenta); font-family: 'Orbitron', sans-serif; font-weight: 700; text-transform: uppercase; }
+        td { font-family: 'Share Tech Mono', monospace; font-size: 0.95rem; }
 
-        .tool-success { color: var(--success); font-weight: bold; }
-        .tool-fail { color: var(--danger); font-weight: bold; }
+        .tool-success { color: var(--toxic-green); font-weight: bold; }
+        .tool-fail { color: var(--blood-red); font-weight: bold; }
 
-        /* Estilos de Barra de Progreso */
+        /* Progress track style */
         .progress-bar-bg {
-            background: #1f2937;
-            height: 8px;
-            border-radius: 4px;
+            background: rgba(157, 0, 255, 0.15);
+            height: 10px;
+            border-radius: 5px;
             overflow: hidden;
             margin-bottom: 20px;
             position: relative;
+            border: 1px solid var(--primary);
         }
 
         .progress-bar-fill {
-            background: linear-gradient(90deg, #6366f1, #a855f7);
+            background: linear-gradient(90deg, var(--primary), var(--magenta), var(--cyan));
             height: 100%;
             width: 0%;
             transition: width 0.4s ease;
+            box-shadow: 0 0 10px var(--cyan);
         }
 
         .steps-nodes {
@@ -335,48 +409,53 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             display: flex;
             flex-direction: column;
             align-items: center;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             color: #6b7280;
             position: relative;
             z-index: 2;
         }
 
         .step-dot {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
-            background: #1f2937;
-            border: 2px solid #374151;
+            background: #0d0d1a;
+            border: 2px solid var(--primary);
             margin-bottom: 8px;
             transition: all 0.3s ease;
         }
 
         .step-node.completed .step-dot {
-            background: var(--success);
-            border-color: var(--success);
-            box-shadow: 0 0 8px var(--success);
+            background: var(--toxic-green);
+            border-color: var(--toxic-green);
+            box-shadow: 0 0 12px var(--toxic-green);
         }
 
         .step-node.active .step-dot {
-            background: var(--primary);
-            border-color: var(--primary);
-            box-shadow: 0 0 10px var(--primary);
+            background: var(--cyan);
+            border-color: var(--cyan);
+            box-shadow: 0 0 15px var(--cyan);
             animation: pulse 1.5s infinite;
         }
 
         .step-node.completed {
-            color: var(--success);
-        }
-
-        .step-node.active {
-            color: var(--primary);
+            color: var(--toxic-green);
+            font-family: 'Orbitron', sans-serif;
             font-weight: 600;
         }
 
-        /* Interactive Panel style */
+        .step-node.active {
+            color: var(--cyan);
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            text-shadow: 0 0 5px var(--cyan);
+        }
+
+        /* Interactive response card */
         .interactive-card {
-            border: 2px solid #a855f7;
-            background: linear-gradient(135deg, #151c2c, #1e1b4b);
+            border: 2px solid var(--magenta);
+            background: linear-gradient(135deg, rgba(21, 12, 36, 0.9), rgba(10, 5, 20, 0.95));
+            box-shadow: 0 0 30px rgba(255, 0, 127, 0.35);
             animation: slideIn 0.3s ease-out;
         }
 
@@ -388,44 +467,57 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         .input-response {
             width: 100%;
             padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #4b5563;
-            background: #0b0f19;
+            border-radius: 4px;
+            border: 1px solid var(--magenta);
+            background: #050508;
             color: white;
-            font-family: inherit;
-            font-size: 0.95rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1rem;
             margin-bottom: 12px;
+            box-shadow: inset 0 0 5px rgba(255, 0, 127, 0.2);
+        }
+
+        .input-response:focus {
+            outline: none;
+            border-color: var(--cyan);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
         }
 
         .btn-submit {
+            font-family: 'Orbitron', sans-serif;
             padding: 12px 24px;
-            border-radius: 8px;
+            border-radius: 4px;
             border: none;
-            background: #a855f7;
+            background: linear-gradient(90deg, var(--magenta), var(--primary));
             color: white;
-            font-weight: 600;
+            font-weight: 900;
             cursor: pointer;
-            transition: background 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
         }
 
         .btn-submit:hover {
-            background: #be185d;
+            background: linear-gradient(90deg, var(--cyan), var(--magenta));
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.6);
+            transform: scale(1.05);
         }
     </style>
 </head>
 <body>
     <header>
         <div>
-            <h1>PsychoSv_503 AI DevOS - Command Center</h1>
-            <p style="color: #9ca3af; font-size: 0.95rem; margin-top: 6px;">Consola Militar de Orquestación y Control de Agentes Autónomos</p>
+            <h1>PsychoSv_503 AI DevOS</h1>
+            <p style="color: #9ca3af; font-size: 0.95rem; margin-top: 6px; font-family: 'Orbitron', sans-serif; letter-spacing: 1px;">CENTRO DE ORQUESTACIÓN DE AGENTES DE ÉLITE</p>
         </div>
         <div id="status-container" class="status-badge status-idle">IDLE</div>
     </header>
 
     <!-- Panel de Interacción Humana (Ask User) -->
     <div id="question-card" class="card interactive-card" style="display: none; margin-bottom: 24px;">
-        <h2 style="color: #a855f7; border-bottom-color: rgba(168, 85, 247, 0.3);">💬 INTERVENCIÓN REQUERIDA (Human-in-the-Loop)</h2>
-        <p id="question-text" style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 500; line-height: 1.5;"></p>
+        <h2 style="color: var(--magenta) !important; border-bottom-color: rgba(255, 0, 127, 0.3);">💬 INTERVENCIÓN REQUERIDA (Human-in-the-Loop)</h2>
+        <p id="question-text" style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 500; line-height: 1.5; font-family: 'Share Tech Mono', monospace; color: #fff;"></p>
         <div>
             <textarea id="response-input" class="input-response" placeholder="Escribe tu respuesta para el agente aquí..." rows="3"></textarea>
             <button onclick="submitResponse()" class="btn-submit">Enviar Respuesta</button>
@@ -482,7 +574,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 </thead>
                 <tbody id="tool-table-body">
                     <tr>
-                        <td colspan="3" style="text-align: center; color: #9ca3af;">Ninguna herramienta ejecutada aún</td>
+                        <td colspan="3" style="text-align: center; color: #9ca3af; font-family: 'Share Tech Mono', monospace;">Ninguna herramienta ejecutada aún</td>
                     </tr>
                 </tbody>
             </table>
@@ -491,7 +583,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         <div class="card">
             <h2>Incidentes de Seguridad</h2>
             <div id="security-alerts-container">
-                <p style="color: #9ca3af; font-size: 0.9rem;">No se han detectado incidentes de seguridad.</p>
+                <p style="color: #9ca3af; font-size: 0.9rem; font-family: 'Share Tech Mono', monospace;">No se han detectado incidentes de seguridad.</p>
             </div>
         </div>
     </div>
@@ -500,25 +592,25 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         function formatLogLine(line) {
             let escaped = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
-            // Colores por patrones y niveles
+            // Colores por patrones y niveles del estilo cyberpunk
             if (escaped.includes("ERROR") || escaped.includes("Fallo")) {
-                return `<span style="color: #ef4444; font-weight: bold;">${escaped}</span>`;
+                return `<span style="color: var(--blood-red); font-weight: bold;">${escaped}</span>`;
             }
             if (escaped.includes("WARNING") || escaped.includes("QualityGate: Fallo") || escaped.includes("fallido")) {
-                return `<span style="color: #fbbf24;">${escaped}</span>`;
+                return `<span style="color: var(--magenta); font-weight: bold;">${escaped}</span>`;
             }
             if (escaped.includes("SUCCESS") || escaped.includes("finalizado con estado") || escaped.includes("COMPLETED")) {
-                return `<span style="color: #34d399; font-weight: 500;">${escaped}</span>`;
+                return `<span style="color: var(--toxic-green); font-weight: bold;">${escaped}</span>`;
             }
             if (escaped.includes("[SHUTDOWN]") || escaped.includes("cerrado ordenadamente")) {
-                return `<span style="color: #c084fc; font-weight: bold;">${escaped}</span>`;
+                return `<span style="color: var(--primary); font-weight: bold;">${escaped}</span>`;
             }
             if (escaped.includes("QualityGate")) {
-                return `<span style="color: #60a5fa; font-weight: bold;">${escaped}</span>`;
+                return `<span style="color: var(--cyan); font-weight: bold;">${escaped}</span>`;
             }
             
             // Resaltar tags de agentes e.g. [psycho-ceo]
-            escaped = escaped.replace(/(\[[a-zA-Z0-9_-]+\])/g, '<span style="color: #818cf8; font-weight: 600;">$1</span>');
+            escaped = escaped.replace(/(\[[a-zA-Z0-9_-]+\])/g, '<span style="color: var(--cyan); font-weight: bold;">$1</span>');
             return escaped;
         }
 
@@ -638,7 +730,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                             secContainer.appendChild(div);
                         });
                     } else {
-                        secContainer.innerHTML = '<p style="color: #9ca3af; font-size: 0.9rem;">No se han detectado incidentes de seguridad.</p>';
+                        secContainer.innerHTML = '<p style="color: #9ca3af; font-size: 0.9rem; font-family: \'Share Tech Mono\', monospace;">No se han detectado incidentes de seguridad.</p>';
                     }
                 })
                 .catch(err => console.error("Error actualizando dashboard:", err));
