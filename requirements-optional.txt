@@ -1,0 +1,4 @@
+# Optional: Graph memory backend (requires Neo4j)
+# Install manually if you want to use Graphiti:
+#   pip install -r requirements-optional.txt
+graphiti-core

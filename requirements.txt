@@ -1,5 +1,4 @@
 requests>=2.31.0
-graphiti-core
 openai>=1.0.0
 python-dotenv>=1.0.0
 nest-asyncio>=1.6.0
