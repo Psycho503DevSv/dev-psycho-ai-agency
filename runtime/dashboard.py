@@ -3,6 +3,7 @@ import socketserver
 import json
 import os
 import threading
+from typing import Optional
 
 from runtime.logger import logger
 
@@ -22,7 +23,8 @@ _state = {
     "recent_tool_calls": [],
     "all_steps": [],
     "completed_steps": [],
-    "pending_question": None
+    "pending_question": None,
+    "document_preview": None
 }
 
 _logs = []
@@ -34,7 +36,32 @@ _lock = threading.Lock()
 _question_event = threading.Event()
 _web_response = None
 
+import re
+
+def redact_secrets(data):
+    """Ofusca claves API, tokens y contraseñas de manera recursiva."""
+    if isinstance(data, str):
+        redacted = data
+        redacted = re.sub(r"\b(AIzaSy[a-zA-Z0-9_-]{33})\b", r"AIzaSy...", redacted)
+        redacted = re.sub(r"\b(gsk_[a-zA-Z0-9_-]{40,})\b", r"gsk_...", redacted)
+        redacted = re.sub(r"\b([0-9]+:[a-zA-Z0-9_-]{35})\b", r"TelegramToken_...", redacted)
+        redacted = re.sub(r"(key|token|password|secret|pass|api_key|authorization|bearer)\b\s*[:=]\s*['\"][^'\"]{4,}['\"]", r"\1: '********'", redacted, flags=re.IGNORECASE)
+        redacted = re.sub(r"(Bearer\s+)[a-zA-Z0-9_-]{15,}", r"\1********", redacted, flags=re.IGNORECASE)
+        return redacted
+    elif isinstance(data, dict):
+        new_dict = {}
+        for k, v in data.items():
+            if k.lower() in ("key", "token", "password", "secret", "pass", "api_key", "authorization", "bearer"):
+                new_dict[k] = "********"
+            else:
+                new_dict[k] = redact_secrets(v)
+        return new_dict
+    elif isinstance(data, list):
+        return [redact_secrets(item) for item in data]
+    return data
+
 def update_dashboard_state(update_dict: dict):
+    update_dict = redact_secrets(update_dict)
     with _lock:
         for k, v in update_dict.items():
             if k in _state:
@@ -45,6 +72,7 @@ def update_dashboard_state(update_dict: dict):
                     _state[k] = v
 
 def add_dashboard_log(log_line: str):
+    log_line = redact_secrets(log_line)
     with _lock:
         _logs.append(log_line)
         if len(_logs) > 50:
@@ -56,16 +84,18 @@ def add_security_alert(alert_line: str):
         if len(_security_alerts) > 20:
             _security_alerts.pop(0)
 
-def set_pending_question(question: str):
+def set_pending_question(question: str, document_preview: Optional[str] = None):
     global _web_response
     with _lock:
         _state["pending_question"] = question
+        _state["document_preview"] = document_preview
         _web_response = None
         _question_event.clear()
 
 def clear_pending_question():
     with _lock:
         _state["pending_question"] = None
+        _state["document_preview"] = None
 
 def submit_web_response(response: str):
     global _web_response
@@ -163,12 +193,17 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             with _lock:
-                # Obtener listado de proyectos disponibles en memory/projects/
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                projects_dir = os.path.join(base_dir, "memory", "projects")
-                available_projects = []
-                if os.path.exists(projects_dir):
-                    available_projects = [d for d in os.listdir(projects_dir) if os.path.isdir(os.path.join(projects_dir, d))]
+                memory_projects_dir = os.path.join(base_dir, "memory", "projects")
+                code_projects_dir = os.path.join(base_dir, "projects")
+                
+                available_set = set()
+                if os.path.exists(memory_projects_dir):
+                    available_set.update([d for d in os.listdir(memory_projects_dir) if os.path.isdir(os.path.join(memory_projects_dir, d))])
+                if os.path.exists(code_projects_dir):
+                    available_set.update([d for d in os.listdir(code_projects_dir) if os.path.isdir(os.path.join(code_projects_dir, d))])
+                
+                available_projects = sorted(list(available_set))
                 
                 response_data = {
                     "state": _state,
@@ -612,6 +647,13 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     <div id="question-card" class="card interactive-card" style="display: none; margin-bottom: 24px;">
         <h2 style="color: var(--magenta) !important; border-bottom-color: rgba(255, 0, 127, 0.3);">💬 INTERVENCIÓN REQUERIDA (Human-in-the-Loop)</h2>
         <p id="question-text" style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 500; line-height: 1.5; font-family: 'Share Tech Mono', monospace; color: #fff;"></p>
+        
+        <!-- Previsualización del Documento -->
+        <div id="doc-preview-section" style="display: none; margin-bottom: 16px;">
+            <p class="info-label" style="margin-bottom: 6px;">📄 Previsualización del Borrador Generado:</p>
+            <div id="doc-preview-content" class="terminal" style="height: 200px; font-family: 'Inter', sans-serif; white-space: pre-wrap; font-size: 0.95rem; padding: 12px; border-color: var(--magenta); background: rgba(157, 0, 255, 0.05); overflow-y: auto;"></div>
+        </div>
+
         <div>
             <textarea id="response-input" class="input-response" placeholder="Escribe tu respuesta para el agente aquí..." rows="3"></textarea>
             <button onclick="submitResponse()" class="btn-submit">Enviar Respuesta</button>
@@ -852,6 +894,16 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     const qCard = document.getElementById('question-card');
                     if (data.state.pending_question) {
                         document.getElementById('question-text').textContent = data.state.pending_question;
+                        
+                        const docSection = document.getElementById('doc-preview-section');
+                        const docContent = document.getElementById('doc-preview-content');
+                        if (data.state.document_preview) {
+                            docContent.textContent = data.state.document_preview;
+                            docSection.style.display = 'block';
+                        } else {
+                            docSection.style.display = 'none';
+                        }
+                        
                         qCard.style.display = 'block';
                     } else {
                         qCard.style.display = 'none';

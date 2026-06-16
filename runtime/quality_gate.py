@@ -1,16 +1,44 @@
 import os
 import ast
-from typing import List, Dict
+import json
+from typing import List, Dict, Optional
 
 from runtime.logger import logger
 from runtime.schemas import GateDecisionSchema
+from config import settings
 
 class QualityGate:
     def __init__(self, project_path: str):
         self.project_path = project_path
         self.errors = []
-        self.required_files = ["README.md", "requirements.txt"]
+        self.registry_path = os.path.join(settings.REGISTRY_DIR, "project-types-registry.json")
+        self.project_types = []
+        self._load_registry()
 
+    def _load_registry(self):
+        if os.path.exists(self.registry_path):
+            try:
+                with open(self.registry_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.project_types = data.get("project_types", [])
+            except Exception as e:
+                logger.warning(f"Error cargando project-types-registry: {e}")
+
+    def detect_project_type(self) -> Optional[Dict]:
+        """Detecta el tipo de proyecto basado en los archivos presentes en el project_path."""
+        if not os.path.exists(self.project_path):
+            return None
+        best_match = None
+        max_matches = -1
+        for pt in self.project_types:
+            req_files = pt.get("archivos_requeridos", [])
+            if not req_files:
+                continue
+            matches = sum(1 for f in req_files if os.path.exists(os.path.join(self.project_path, f)))
+            if matches > 0 and matches > max_matches:
+                max_matches = matches
+                best_match = pt
+        return best_match
 
     def validate_syntax(self) -> bool:
         """Valida que todos los archivos .py sean sintácticamente correctos."""
@@ -30,11 +58,64 @@ class QualityGate:
     def validate_structure(self) -> bool:
         """Valida la presencia de archivos obligatorios."""
         passed = True
-        for rf in self.required_files:
+        pt = self.detect_project_type()
+        if not pt:
+            self.errors.append("NO_PROJECT_TYPE_DETECTED: No se pudo auto-detectar un tipo de proyecto válido en el directorio.")
+            required_files = ["README.md"]
+        else:
+            required_files = pt.get("archivos_requeridos", [])
+            if "README.md" not in required_files:
+                required_files = list(required_files) + ["README.md"]
+            logger.info(f"Tipo de proyecto detectado para validación: {pt.get('nombre')} ({pt.get('id')})")
+            
+        for rf in required_files:
             if not os.path.exists(os.path.join(self.project_path, rf)):
                 self.errors.append(f"MISSING_FILE: {rf}")
                 passed = False
         return passed
+
+    @staticmethod
+    def validate_phase(workflow_id: str, project_memory_dir: str) -> Dict:
+        """
+        Valida que los entregables de una fase documental (discovery, planning) cumplan
+        con las especificaciones mínimas y firmas requeridas.
+        """
+        errors = []
+        if workflow_id == "wf-discovery":
+            req_path = os.path.join(project_memory_dir, "requirements.md")
+            if not os.path.exists(req_path):
+                errors.append(f"El archivo de requisitos no fue creado: {req_path}")
+            else:
+                try:
+                    with open(req_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    if len(content) < 500:
+                        errors.append(f"El archivo {req_path} tiene longitud insuficiente ({len(content)}/500 caracteres).")
+                    if "Entrevista validada" not in content:
+                        errors.append(f"El archivo {req_path} no contiene la firma obligatoria 'Entrevista validada' del CEO.")
+                except Exception as e:
+                    errors.append(f"Error leyendo {req_path}: {str(e)}")
+        elif workflow_id == "wf-planning":
+            arch_path = os.path.join(project_memory_dir, "architecture.md")
+            if not os.path.exists(arch_path):
+                errors.append(f"El archivo de arquitectura no fue creado: {arch_path}")
+            else:
+                try:
+                    with open(arch_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    if len(content) < 500:
+                        errors.append(f"El archivo {arch_path} tiene longitud insuficiente ({len(content)}/500 caracteres).")
+                    if "##" not in content:
+                        errors.append(f"El archivo {arch_path} no contiene secciones principales estructuradas (ej. '## Componentes').")
+                except Exception as e:
+                    errors.append(f"Error leyendo {arch_path}: {str(e)}")
+        approved = len(errors) == 0
+        return {
+            "approved": approved,
+            "status": "SUCCESS" if approved else "FAIL",
+            "errors": errors,
+            "score": 10.0 if approved else 2.0
+        }
 
     def run(self) -> Dict:
         syntax = self.validate_syntax()

@@ -28,12 +28,30 @@ class McpExecutor:
     def __init__(self, base_dir: Optional[str] = None):
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.active_project_name: Optional[str] = None
+        self.active_workflow_id: Optional[str] = None
 
 
     def execute_tool(self, tool_name: str, arguments: Dict[str, Any], agent_role: Optional[str] = None) -> Dict[str, Any]:
         """Despacha y ejecuta herramientas simulando un servidor MCP local, verificando permisos por rol."""
         logger.info(f"Ejecutando herramienta MCP: {tool_name} para rol '{agent_role}' con argumentos: {arguments}")
         
+        # Guardrail granular por fase/workflow
+        if self.active_workflow_id:
+            if self.active_workflow_id == "wf-discovery":
+                allowed_discovery_tools = {"read_file", "write_file", "list_dir", "ask_user"}
+                if tool_name not in allowed_discovery_tools:
+                    return {
+                        "status": "FAIL",
+                        "error": f"Acceso Denegado: La herramienta '{tool_name}' no está permitida en la fase de descubrimiento ({self.active_workflow_id})."
+                    }
+            elif self.active_workflow_id == "wf-planning":
+                allowed_planning_tools = {"read_file", "write_file", "list_dir", "ask_user", "search_code"}
+                if tool_name not in allowed_planning_tools:
+                    return {
+                        "status": "FAIL",
+                        "error": f"Acceso Denegado: La herramienta '{tool_name}' no está permitida en la fase de planificación ({self.active_workflow_id})."
+                    }
+
         # Guardrail granular por rol para la herramienta 'run_command'
         if tool_name == "run_command" and agent_role:
             cmd = arguments.get("command", "").strip()
@@ -137,7 +155,6 @@ class McpExecutor:
         path = self._resolve_path(args.get("path", ""))
         content = args.get("content", "")
         
-        # Filtro de seguridad: Bloquear claves privadas, archivos del sistema/shell, e inyecciones en el entorno
         filename = os.path.basename(path).lower()
         forbidden_extensions = {".pem", ".key", ".pub", ".cer", ".crt", ".der", ".pfx", ".p12"}
         forbidden_files = {".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "authorized_keys"}
@@ -147,6 +164,51 @@ class McpExecutor:
         if ext in forbidden_extensions or filename in forbidden_files or any(part.startswith(".ssh") for part in path.replace("\\", "/").split("/")):
             self._log_security_violation("Escritura bloqueada", f"Intento de escribir en archivo restringido: {path}")
             return {"status": "FAIL", "error": "Acceso denegado: No está permitido escribir claves privadas, credenciales ni configuraciones críticas de terminal."}
+
+        # 1. Protección contra sobrescritura destructiva/truncada de memoria
+        is_requirements = filename == "requirements.md"
+        is_architecture = filename == "architecture.md"
+        if (is_requirements or is_architecture) and os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    old_content = f.read()
+                if len(old_content) > 0:
+                    pct_reduction = (len(old_content) - len(content)) / len(old_content)
+                    if pct_reduction > 0.30:
+                        return {
+                            "status": "FAIL",
+                            "error": f"Acceso Denegado: Intento de sobrescritura destructiva detectado. La reducción de contenido del archivo es del {pct_reduction:.1%}. Debes preservar la información previamente validada."
+                        }
+                    if is_requirements and "Entrevista validada" in old_content and "Entrevista validada" not in content:
+                        return {
+                            "status": "FAIL",
+                            "error": "Acceso Denegado: No puedes eliminar la marca de validación 'Entrevista validada' del archivo de requisitos."
+                        }
+                    if is_architecture and "##" in old_content and "##" not in content:
+                        return {
+                            "status": "FAIL",
+                            "error": "Acceso Denegado: No puedes eliminar las secciones estructuradas de arquitectura previamente definidas."
+                        }
+            except Exception as e:
+                logger.warning(f"Error en protección de sobreescritura: {e}")
+
+        # 2. Bloquear secretos en el repositorio (excepto plantillas .env.example)
+        if filename != ".env.example":
+            secret_patterns = [
+                r"api_key\s*=\s*['\"][a-zA-Z0-9_-]{20,}['\"]",
+                r"token\s*=\s*['\"][0-9]+:[a-zA-Z0-9_-]{35,}['\"]",
+                r"password\s*=\s*['\"][a-zA-Z0-9_-]{8,}['\"]",
+                r"gemini_api_key\s*=\s*['\"][a-zA-Z0-9_-]{20,}['\"]",
+                r"groq_api_key\s*=\s*['\"][a-zA-Z0-9_-]{20,}['\"]"
+            ]
+            import re
+            for pat in secret_patterns:
+                if re.search(pat, content, re.IGNORECASE):
+                    self._log_security_violation("Secretos detectados", f"Intento de escribir secretos directamente en el código de {path}")
+                    return {
+                        "status": "FAIL",
+                        "error": "Acceso Denegado: No está permitido guardar secretos o API keys directamente en los archivos de código del repositorio. Utiliza variables de entorno o plantillas .env.example."
+                    }
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
@@ -428,7 +490,27 @@ class McpExecutor:
             _question_event
         )
 
-        set_pending_question(question)
+        preview_content = None
+        if self.active_project_name and self.active_workflow_id:
+            memory_dir = os.path.join(self.base_dir, "memory", "projects", self.active_project_name)
+            if self.active_workflow_id == "wf-discovery":
+                doc_path = os.path.join(memory_dir, "requirements.md")
+                if os.path.exists(doc_path):
+                    try:
+                        with open(doc_path, "r", encoding="utf-8") as f:
+                            preview_content = f.read()
+                    except Exception:
+                        pass
+            elif self.active_workflow_id == "wf-planning":
+                doc_path = os.path.join(memory_dir, "architecture.md")
+                if os.path.exists(doc_path):
+                    try:
+                        with open(doc_path, "r", encoding="utf-8") as f:
+                            preview_content = f.read()
+                    except Exception:
+                        pass
+
+        set_pending_question(question, document_preview=preview_content)
         _question_event.clear()
 
         # Only try console input if we have an interactive TTY or we are running under pytest

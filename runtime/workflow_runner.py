@@ -25,11 +25,12 @@ if sys.platform == "win32" and "pytest" not in sys.modules:
 from config import settings
 
 try:
-    from runtime.dashboard import start_dashboard_server, update_dashboard_state, add_dashboard_log
+    from runtime.dashboard import start_dashboard_server, update_dashboard_state, add_dashboard_log, clear_pending_question
 except ImportError:
     def start_dashboard_server() -> None: pass
     def update_dashboard_state(state: Dict[str, Any]) -> None: pass
     def add_dashboard_log(log: str) -> None: pass
+    def clear_pending_question() -> None: pass
 
 
 from runtime.logger import logger
@@ -560,7 +561,7 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
                     add_dashboard_log(f"[{agent_id}] ERROR LLM: {str(e)}")
                 except Exception:
                     pass
-                break
+                raise e
 
             # Prevenir repeticiones idénticas de respuesta (bucle de alucinación)
             if response.strip() == last_response.strip():
@@ -650,7 +651,31 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
         self.active_workflow_id = workflow_id
         self.active_project_name = project_name
         self.mcp_executor.active_project_name = project_name
+        self.mcp_executor.active_workflow_id = workflow_id
         self.active_steps_completed = []
+
+        if project_name in ("default_project", "Ninguno") and "pytest" not in sys.modules:
+            logger.info("Esperando a que el usuario cree o seleccione un proyecto en el Dashboard (Gestión de Proyectos)...")
+            try:
+                update_dashboard_state({"pending_question": "Por favor, selecciona o crea un proyecto activo en el panel 'Gestión de Proyectos' para comenzar."})
+            except Exception:
+                pass
+            import time
+            from runtime.dashboard import _state, _lock
+            while True:
+                with _lock:
+                    current_proj = _state.get("project_name")
+                if isinstance(current_proj, str) and current_proj not in ("Ninguno", "default_project"):
+                    project_name = current_proj
+                    self.active_project_name = project_name
+                    self.mcp_executor.active_project_name = project_name
+                    try:
+                        clear_pending_question()
+                    except Exception:
+                        pass
+                    logger.info(f"Proyecto seleccionado desde el dashboard: '{project_name}'. Continuando ejecución.")
+                    break
+                time.sleep(1.0)
         
         # Crear directorio de memoria aislado para el proyecto
         project_memory_dir = os.path.join(settings.MEMORY_DIR, "projects", project_name)
@@ -777,6 +802,33 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
                     "role": context["role"],
                     "output": agent_output
                 })
+
+                # --- CHECKPOINT DE HANDOVER ---
+                # Validar entregables del paso antes de proceder
+                if workflow_id == "wf-discovery":
+                    req_path = os.path.join(project_memory_dir, "requirements.md")
+                    if not os.path.exists(req_path):
+                        raise RuntimeError(f"El paso {agent_id} finalizó pero no existe el archivo obligatorio de requisitos: {req_path}")
+                    if agent_id == wf.get("steps", [])[-1]:
+                        phase_res = QualityGate.validate_phase(workflow_id, project_memory_dir)
+                        if not phase_res["approved"]:
+                            raise RuntimeError(f"El entregable final del workflow no cumple los requisitos: {', '.join(phase_res['errors'])}")
+                
+                elif workflow_id == "wf-planning":
+                    arch_path = os.path.join(project_memory_dir, "architecture.md")
+                    if not os.path.exists(arch_path):
+                        raise RuntimeError(f"El paso {agent_id} finalizó pero no existe el archivo obligatorio de arquitectura: {arch_path}")
+                    if agent_id == wf.get("steps", [])[-1]:
+                        phase_res = QualityGate.validate_phase(workflow_id, project_memory_dir)
+                        if not phase_res["approved"]:
+                            raise RuntimeError(f"El entregable final de planificación no cumple los requisitos: {', '.join(phase_res['errors'])}")
+                            
+                elif workflow_id in ("wf-implementation", "wf-build-project"):
+                    if agent_id in ("frontend", "backend"):
+                        project_path = os.path.join(self.projects_dir, project_name)
+                        if not os.path.exists(project_path):
+                            raise RuntimeError(f"El paso {agent_id} finalizó pero no existe la carpeta del proyecto en {project_path}")
+
                 steps_execution.append(agent_id)
                 self.active_steps_completed = steps_execution
                 try:
@@ -802,35 +854,11 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
         
         # 1. Quality Gates para especificaciones de memoria (Discovery y Planning)
         if self.status == "RUNNING" or self.status == "SUCCESS":
-            if workflow_id == "wf-discovery":
-                req_path = os.path.join(project_memory_dir, "requirements.md")
-                if not os.path.exists(req_path):
+            if workflow_id in ("wf-discovery", "wf-planning"):
+                phase_res = QualityGate.validate_phase(workflow_id, project_memory_dir)
+                if not phase_res["approved"]:
                     self.status = "FAILED"
-                    gate_result = {"status": "FAIL", "errors": [f"El archivo {req_path} no fue creado."]}
-                else:
-                    with open(req_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    if len(content) < 500 or "Entrevista validada" not in content:
-                        self.status = "FAILED"
-                        gate_result = {
-                            "status": "FAIL",
-                            "errors": [f"El archivo {req_path} no cumple los requisitos mínimos (longitud actual: {len(content)}/500, contiene 'Entrevista validada': {'Entrevista validada' in content})."]
-                        }
-            elif workflow_id == "wf-planning":
-                arch_path = os.path.join(project_memory_dir, "architecture.md")
-                if not os.path.exists(arch_path):
-                    self.status = "FAILED"
-                    gate_result = {"status": "FAIL", "errors": [f"El archivo {arch_path} no fue creado."]}
-                else:
-                    with open(arch_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    has_sections = "##" in content
-                    if len(content) < 500 or not has_sections:
-                        self.status = "FAILED"
-                        gate_result = {
-                            "status": "FAIL",
-                            "errors": [f"El archivo {arch_path} no cumple los requisitos mínimos (longitud actual: {len(content)}/500, secciones principales presentes: {has_sections})."]
-                        }
+                    gate_result = phase_res
 
         # 2. Quality Gate para código (Implementación/Evaluación)
         if (self.status == "RUNNING" or self.status == "SUCCESS") and ("agent-evaluator" in steps_execution or "backend" in steps_execution):
