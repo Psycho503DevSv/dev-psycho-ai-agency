@@ -33,3 +33,8 @@ generate_stress_test.py
 
 # Experimental / Test / Mock projects
 projects/
+.coverage 
+logs/ 
+memory/security_audit.log 
+memory/token_usage.json 
+node_modules/
