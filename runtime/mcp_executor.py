@@ -417,11 +417,12 @@ class McpExecutor:
         set_pending_question(question)
         _question_event.clear()
 
-        # Only try console input if we have an interactive TTY
+        # Only try console input if we have an interactive TTY or we are running under pytest
         console_res = []
         is_tty = _sys.stdin is not None and hasattr(_sys.stdin, 'isatty') and _sys.stdin.isatty()
+        is_pytest = "pytest" in _sys.modules
 
-        if is_tty:
+        if is_tty or is_pytest:
             print("\n" + "="*50)
             print(f"PREGUNTA DEL AGENTE:\n{question}")
             print("="*50)
@@ -439,11 +440,12 @@ class McpExecutor:
 
         # Wait up to 5 minutes for a response (console OR web dashboard)
         logger.info(f"[ask_user] Esperando respuesta humana via dashboard en http://localhost:8050 ...")
-        responded = _question_event.wait(timeout=300)
+        wait_timeout = 2 if is_pytest else 300
+        responded = _question_event.wait(timeout=wait_timeout)
         clear_pending_question()
 
         if not responded:
-            return {"status": "FAIL", "error": "Tiempo de espera agotado (5 min). No se recibió respuesta del usuario."}
+            return {"status": "FAIL", "error": f"Tiempo de espera agotado ({wait_timeout}s). No se recibió respuesta del usuario."}
 
         if console_res:
             return {"status": "SUCCESS", "response": console_res[0]}
