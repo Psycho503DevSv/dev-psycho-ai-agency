@@ -35,5 +35,8 @@ projects/
 .coverage 
 logs/ 
 memory/security_audit.log 
-memory/token_usage.json 
+memory/token_usage.json
+memory/key_rotation_state.json
+memory/sessions/
+ruta/
 node_modules/
