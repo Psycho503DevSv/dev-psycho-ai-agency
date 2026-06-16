@@ -122,29 +122,40 @@ class WorkflowRunner:
             self.workflows = {wf["id"]: wf for wf in json.load(f).get("workflows", [])}
 
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """Realiza una llamada HTTP directa a NVIDIA NIM o OpenAI con reintentos, timeouts y fallback cruzado."""
+        """Realiza una llamada HTTP directa a NVIDIA NIM, OpenAI o Anthropic con reintentos, timeouts y fallback cruzado."""
         nvidia_key = getattr(settings, "NVIDIA_API_KEY", "")
         openai_key = getattr(settings, "OPENAI_API_KEY", "")
+        anthropic_key = getattr(settings, "ANTHROPIC_API_KEY", "")
 
         # Definir los proveedores configurados disponibles
         providers = []
-        if nvidia_key:
+        if anthropic_key:
             providers.append({
-                "name": "NVIDIA NIM",
-                "url": "https://integrate.api.nvidia.com/v1/chat/completions",
-                "key": nvidia_key,
-                "model": "meta/llama-3.1-8b-instruct"
+                "name": "Anthropic",
+                "url": "https://api.anthropic.com/v1/messages",
+                "key": anthropic_key,
+                "model": "claude-3-5-sonnet-20241022",
+                "is_anthropic": True
             })
         if openai_key:
             providers.append({
                 "name": "OpenAI",
                 "url": "https://api.openai.com/v1/chat/completions",
                 "key": openai_key,
-                "model": "gpt-4o-mini"
+                "model": "gpt-4o",
+                "is_anthropic": False
+            })
+        if nvidia_key:
+            providers.append({
+                "name": "NVIDIA NIM",
+                "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+                "key": nvidia_key,
+                "model": "meta/llama-3.1-8b-instruct",
+                "is_anthropic": False
             })
 
         if not providers:
-            raise ValueError("No se encontraron claves de API (NVIDIA_API_KEY o OPENAI_API_KEY) en config/settings.")
+            raise ValueError("No se encontraron claves de API (NVIDIA_API_KEY, OPENAI_API_KEY o ANTHROPIC_API_KEY) en config/settings.")
 
         # Intentar con los proveedores en secuencia (conmutación por error)
         import time
@@ -152,31 +163,63 @@ class WorkflowRunner:
 
         for provider in providers:
             logger.info(f"Intentando llamada a LLM usando proveedor: {provider['name']} ({provider['model']})")
-            headers = {
-                "Authorization": f"Bearer {provider['key']}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": provider["model"],
-                "messages": messages,
-                "temperature": 0.2
-            }
+            
+            if provider.get("is_anthropic"):
+                headers = {
+                    "x-api-key": provider["key"],
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json"
+                }
+                # Anthropic requiere extraer el mensaje system del array de mensajes
+                system_text = ""
+                filtered_messages = []
+                for msg in messages:
+                    if msg["role"] == "system":
+                        system_text += msg["content"] + "\n"
+                    else:
+                        filtered_messages.append(msg)
+                
+                payload = {
+                    "model": provider["model"],
+                    "messages": filtered_messages,
+                    "max_tokens": 4000,
+                    "temperature": 0.2
+                }
+                if system_text:
+                    payload["system"] = system_text.strip()
+            else:
+                headers = {
+                    "Authorization": f"Bearer {provider['key']}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": provider["model"],
+                    "messages": messages,
+                    "temperature": 0.2
+                }
 
             max_retries = 2
             backoff = 2.0
 
             for attempt in range(max_retries):
                 try:
-                    response = requests.post(provider["url"], headers=headers, json=payload, timeout=30)
+                    response = requests.post(provider["url"], headers=headers, json=payload, timeout=45)
                     response.raise_for_status()
                     res_data = response.json()
 
                     # Procesar y registrar uso de tokens
                     try:
                         usage = res_data.get("usage", {})
-                        prompt_tokens = usage.get("prompt_tokens", 0)
-                        completion_tokens = usage.get("completion_tokens", 0)
-                        cost = (prompt_tokens * 0.00000015) + (completion_tokens * 0.00000060)
+                        if provider.get("is_anthropic"):
+                            prompt_tokens = usage.get("input_tokens", 0)
+                            completion_tokens = usage.get("output_tokens", 0)
+                            # Costo de Claude 3.5 Sonnet: $3 / M input, $15 / M output
+                            cost = (prompt_tokens * 0.000003) + (completion_tokens * 0.000015)
+                        else:
+                            prompt_tokens = usage.get("prompt_tokens", 0)
+                            completion_tokens = usage.get("completion_tokens", 0)
+                            # Costo estimado de GPT-4o: $5 / M input, $15 / M output
+                            cost = (prompt_tokens * 0.000005) + (completion_tokens * 0.000015)
 
                         memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
                         os.makedirs(memory_dir, exist_ok=True)
@@ -211,7 +254,10 @@ class WorkflowRunner:
                     except Exception as ex:
                         logger.warning(f"No se pudo guardar métricas de uso de tokens: {str(ex)}")
 
-                    return res_data["choices"][0]["message"]["content"]
+                    if provider.get("is_anthropic"):
+                        return res_data["content"][0]["text"]
+                    else:
+                        return res_data["choices"][0]["message"]["content"]
 
                 except Exception as e:
                     last_exception = e

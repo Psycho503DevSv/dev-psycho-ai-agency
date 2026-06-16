@@ -138,8 +138,9 @@ def run_environment_check() -> dict:
 # ─── Configuración de .env ───────────────────────────────────────────────────
 
 API_FIELDS = [
-    ("NVIDIA_API_KEY",  "NVIDIA NIM API Key   (deja vacío para usar OpenAI)"),
-    ("OPENAI_API_KEY",  "OpenAI API Key        (deja vacío si usas NVIDIA)"),
+    ("NVIDIA_API_KEY",  "NVIDIA NIM API Key    (deja vacío para usar OpenAI/Anthropic)"),
+    ("OPENAI_API_KEY",  "OpenAI API Key        (deja vacío si usas NVIDIA/Anthropic)"),
+    ("ANTHROPIC_API_KEY", "Anthropic API Key    (deja vacío si usas NVIDIA/OpenAI)"),
     ("GRAPHITI_URI",    "Neo4j / Graphiti URI  [neo4j://localhost:7687]"),
     ("GRAPHITI_USER",   "Neo4j usuario         [neo4j]"),
     ("GRAPHITI_PASS",   "Neo4j contraseña      [deja vacío si no usas memoria]"),
