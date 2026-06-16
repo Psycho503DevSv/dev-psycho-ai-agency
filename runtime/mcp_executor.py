@@ -87,11 +87,12 @@ class McpExecutor:
         memory_dir_abs = os.path.abspath(os.path.join(self.base_dir, "memory"))
         if self.active_project_name and resolved_path.startswith(memory_dir_abs):
             filename = os.path.basename(resolved_path)
+            relative_subpath = os.path.relpath(resolved_path, memory_dir_abs)
+            is_already_project_scoped = relative_subpath.replace("\\", "/").startswith("projects/")
             # Excepciones globales que no se aíslan por proyecto
-            is_global = filename in ["lessons_learned.md", "token_usage.json", "security_audit.log"] or "projects" in resolved_path.replace("\\", "/").split("/")
+            is_global = filename in ["lessons_learned.md", "token_usage.json", "security_audit.log"] or is_already_project_scoped
             
             if not is_global:
-                relative_subpath = os.path.relpath(resolved_path, memory_dir_abs)
                 resolved_path = os.path.abspath(os.path.join(memory_dir_abs, "projects", self.active_project_name, relative_subpath))
                 
         return resolved_path

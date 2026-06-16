@@ -39,6 +39,8 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 

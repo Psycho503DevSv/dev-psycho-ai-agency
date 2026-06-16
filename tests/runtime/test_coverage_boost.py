@@ -470,6 +470,8 @@ class TestWorkflowRunnerExtended:
              patch("runtime.workflow_runner.WorkflowRunner._load_registry"), \
              patch("runtime.workflow_runner.WorkflowRunner._setup_shutdown_handlers"), \
              patch("config.settings.NVIDIA_API_KEY", ""), \
+             patch("config.settings.GEMINI_API_KEY", ""), \
+             patch("config.settings.GROQ_API_KEY", ""), \
              patch("config.settings.OPENAI_API_KEY", "openai-test-key"), \
              patch("requests.post", return_value=mock_resp):
             from runtime.workflow_runner import WorkflowRunner
@@ -477,28 +479,61 @@ class TestWorkflowRunnerExtended:
             result = runner._call_llm([{"role": "user", "content": "hola"}])
             assert result == "Respuesta de OpenAI"
 
-    def test_call_llm_nvidia_failover_to_openai(self):
-        """_call_llm hace failover de NVIDIA a OpenAI cuando NVIDIA falla."""
-        mock_fail = MagicMock()
-        mock_fail.raise_for_status.side_effect = Exception("NVIDIA down")
+    def test_call_llm_gemini_rotates_to_groq_on_full_pool_exhaustion(self):
+        """Cuando todo el pool de Gemini está agotado, el rotador pasa a Groq."""
+        import requests as req_mod
 
+        # Gemini falla (timeout)
+        mock_fail = MagicMock()
+        mock_fail.raise_for_status.side_effect = Exception("timed out")
+
+        # Groq responde correctamente
         mock_ok = MagicMock()
         mock_ok.raise_for_status.return_value = None
         mock_ok.json.return_value = {
-            "choices": [{"message": {"content": "OpenAI Fallback OK"}}],
+            "choices": [{"message": {"content": "Groq Fallback OK"}}],
             "usage": {"prompt_tokens": 5, "completion_tokens": 3}
         }
 
+        # Mockear el rotador para que devuelva una key fija
         with patch("runtime.workflow_runner.AgentLoader"), \
              patch("runtime.workflow_runner.MemoryEngine"), \
              patch("runtime.workflow_runner.McpExecutor"), \
              patch("runtime.workflow_runner.WorkflowRunner._load_registry"), \
              patch("runtime.workflow_runner.WorkflowRunner._setup_shutdown_handlers"), \
-             patch("config.settings.NVIDIA_API_KEY", "nvidia-key"), \
-             patch("config.settings.OPENAI_API_KEY", "openai-key"), \
-             patch("requests.post", side_effect=[mock_fail, mock_fail, mock_ok]):
+             patch("config.settings.NVIDIA_API_KEY", ""), \
+             patch("config.settings.OPENAI_API_KEY", ""), \
+             patch("config.settings.ANTHROPIC_API_KEY", ""), \
+             patch("config.settings.GEMINI_API_KEY", "gemini-key-1"), \
+             patch("config.settings.GROQ_API_KEY", "groq-key-1"), \
+             patch("runtime.key_rotator.get_active_key", side_effect=lambda p, keys: keys[0] if keys else None), \
+             patch("key_rotator.get_active_key", side_effect=lambda p, keys: keys[0] if keys else None, create=True), \
+             patch("runtime.key_rotator.mark_key_exhausted"), \
+             patch("key_rotator.mark_key_exhausted", create=True), \
+             patch("runtime.key_rotator.parse_keys", side_effect=lambda raw: [raw] if raw else []), \
+             patch("key_rotator.parse_keys", side_effect=lambda raw: [raw] if raw else [], create=True), \
+             patch("runtime.key_rotator.is_quota_error", return_value=False), \
+             patch("key_rotator.is_quota_error", return_value=False, create=True), \
+             patch("requests.post", side_effect=[mock_fail, mock_ok]):
             from runtime.workflow_runner import WorkflowRunner
             runner = WorkflowRunner()
             result = runner._call_llm([{"role": "user", "content": "test"}])
-            assert result == "OpenAI Fallback OK"
+            assert result == "Groq Fallback OK"
+
+    def test_call_llm_raises_when_no_providers_configured(self):
+        """Sin ninguna key configurada, _call_llm lanza ValueError."""
+        with patch("runtime.workflow_runner.AgentLoader"), \
+             patch("runtime.workflow_runner.MemoryEngine"), \
+             patch("runtime.workflow_runner.McpExecutor"), \
+             patch("runtime.workflow_runner.WorkflowRunner._load_registry"), \
+             patch("runtime.workflow_runner.WorkflowRunner._setup_shutdown_handlers"), \
+             patch("config.settings.NVIDIA_API_KEY", ""), \
+             patch("config.settings.OPENAI_API_KEY", ""), \
+             patch("config.settings.ANTHROPIC_API_KEY", ""), \
+             patch("config.settings.GEMINI_API_KEY", ""), \
+             patch("config.settings.GROQ_API_KEY", ""):
+            from runtime.workflow_runner import WorkflowRunner
+            runner = WorkflowRunner()
+            with pytest.raises((ValueError, RuntimeError)):
+                runner._call_llm([{"role": "user", "content": "test"}])
 

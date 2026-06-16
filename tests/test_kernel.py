@@ -3,10 +3,10 @@ import os
 import json
 import shutil
 from unittest.mock import patch
-from runtime.agent_loader import AgentLoader
-from runtime.memory_engine import MemoryEngine
-from runtime.workflow_runner import WorkflowRunner
-from runtime.quality_gate import QualityGate
+from agent_loader import AgentLoader
+from memory_engine import MemoryEngine
+from workflow_runner import WorkflowRunner
+from quality_gate import QualityGate
 from config import settings
 
 @pytest.fixture
@@ -30,6 +30,7 @@ def test_agent_loader(temp_dir):
     agents = loader.load_agents()
     assert "test-agent" in agents
     ctx = loader.get_agent_context("test-agent")
+    assert ctx is not None
     assert ctx["role"] == "tester"
 
 def test_memory_engine(temp_dir):
@@ -162,7 +163,7 @@ def test_workflow_runner_edge_cases(temp_dir):
     class BadAgentLoader:
         def load_agents(self):
             raise ValueError("Loader failed")
-    runner.agent_loader = BadAgentLoader()
+    runner.agent_loader = BadAgentLoader()  # type: ignore
     res = runner.run_workflow("wf-test", "test-prj")
     assert res["status"] == "FAIL"
     assert "Loader failed" in res["error"]
@@ -173,9 +174,9 @@ def test_workflow_runner_edge_cases(temp_dir):
     class BadContextLoader:
         def load_agents(self):
             return {"agent-1": {"id": "agent-1"}}
-        def get_agent_context(self, agent_id):
+        def get_agent_context(self, agent_id, project_name=None):
             raise ValueError("Context failed")
-    runner2.agent_loader = BadContextLoader()
+    runner2.agent_loader = BadContextLoader()  # type: ignore
     runner2.memory = MemoryEngine(base_path=str(temp_dir))
     res2 = runner2.run_workflow("wf-test", "test-prj")
     assert res2["status"] == "FAIL"
@@ -191,10 +192,10 @@ def test_workflow_runner_edge_cases(temp_dir):
     class QGLoader:
         def load_agents(self):
             return {"backend": {"id": "backend", "role": "backend", "path": str(temp_dir)}}
-        def get_agent_context(self, agent_id):
+        def get_agent_context(self, agent_id, project_name=None):
             return {"id": "backend", "role": "backend", "path": str(temp_dir)}
             
-    runner3.agent_loader = QGLoader()
+    runner3.agent_loader = QGLoader()  # type: ignore
     runner3.memory = MemoryEngine(base_path=str(temp_dir))
     runner3.projects_dir = str(temp_dir / "projects")
     
@@ -218,7 +219,9 @@ def test_workflow_runner_edge_cases(temp_dir):
     # Quality Gate raises exception
     # Mocking run method of QualityGate to raise exception
     original_run = QualityGate.run
-    QualityGate.run = lambda self: exec("raise ValueError('Gate error')")
+    def mock_run(self) -> dict:
+        raise ValueError("Gate error")
+    QualityGate.run = mock_run
     try:
         with patch("runtime.workflow_runner.WorkflowRunner._call_llm", return_value="REPORT: backend task completed"):
             res_qg_exc = runner3.run_workflow("wf-qg", "my-project")

@@ -53,3 +53,12 @@
 * Verifica la presencia de archivos obligatorios (README.md, requirements.txt) antes de iniciar el workflow.
 * Asegúrate de que los archivos requeridos estén actualizados y no faltantes.
 * Revisa la configuración del workflow para asegurarte de que se estén evaluando los archivos correctos.
+* Es importante proporcionar información de entrada clara para evitar preguntas generales innecesarias.
+* Es fundamental coordinar con el equipo para asegurar la alineación del alcance del proyecto.
+* La documentación debe ser actualizada en tiempo real para reflejar los cambios en el alcance del proyecto.
+* Verificar la ruta absoluta y el nombre del archivo antes de utilizar herramientas de lectura o escritura de archivos.
+* Utilizar herramientas de gestión de flujo de trabajo como Bash para definir y ejecutar tareas de manera automática.
+* Verificar el acceso al directorio antes de ejecutar comandos que requieran permisos elevados.
+* Verifica la existencia de archivos de requerimientos antes de iniciar el flujo de trabajo.
+* Asegúrate de que los archivos de requerimientos estén en el lugar correcto y sean accesibles para el validador de calidad.
+* Revisa la configuración del validador de calidad para asegurarte de que esté configurado correctamente para buscar archivos de requerimientos en el lugar adecuado.

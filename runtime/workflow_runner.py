@@ -121,56 +121,143 @@ class WorkflowRunner:
         with open(self.registry_path, 'r', encoding='utf-8-sig') as f:
             self.workflows = {wf["id"]: wf for wf in json.load(f).get("workflows", [])}
 
-    def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """Realiza una llamada HTTP directa a NVIDIA NIM, OpenAI o Anthropic con reintentos, timeouts y fallback cruzado."""
-        nvidia_key = getattr(settings, "NVIDIA_API_KEY", "")
+    def _call_llm(self, messages: List[Dict[str, str]], agent_id: Optional[str] = None) -> str:
+        """
+        Llamada al LLM con rotador inteligente de multi-keys.
+
+        Orden de prioridad:
+          1. Gemini  (pool de N keys separadas por coma — rotación diaria + inmediata por cuota)
+          2. Groq    (pool de N keys separadas por coma — rotación diaria + inmediata por cuota)
+          3. Anthropic (key única)
+          4. OpenAI   (key única)
+          (NVIDIA NIM reservado solo para auto-aprendizaje, no para agentes)
+        """
+        import time
+        try:
+            from runtime.key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error
+        except ImportError:
+            sys.path.append(os.path.dirname(__file__))
+            from key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error
+
         openai_key = getattr(settings, "OPENAI_API_KEY", "")
         anthropic_key = getattr(settings, "ANTHROPIC_API_KEY", "")
+        gemini_raw = getattr(settings, "GEMINI_API_KEY", "")
+        groq_raw = getattr(settings, "GROQ_API_KEY", "")
 
-        # Definir los proveedores configurados disponibles
-        providers = []
+        gemini_keys = parse_keys(gemini_raw)
+        groq_keys = parse_keys(groq_raw)
+
+        is_complex_agent = agent_id in ["psycho-ceo", "product-manager", "ai-architect"]
+
+        # ── Construir la lista de "slots" de proveedores ──
+        # Cada slot de Gemini/Groq es un proveedor independiente con su key activa del pool.
+        # Si la key activa falla por cuota, se marca y se pasa al siguiente slot.
+        provider_slots = []
+
+        # ── Gemini (multi-key con rotador) ──
+        if gemini_keys:
+            gemini_model = "gemini-1.5-pro" if is_complex_agent else "gemini-1.5-flash"
+            # Intentaremos cada key del pool en orden (la activa primero, luego las demás)
+            for offset in range(len(gemini_keys)):
+                active_key = get_active_key("gemini", gemini_keys)
+                if active_key:
+                    provider_slots.append({
+                        "name": f"Gemini[{gemini_keys.index(active_key)}]",
+                        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                        "key": active_key,
+                        "model": gemini_model,
+                        "is_anthropic": False,
+                        "pool_name": "gemini",
+                        "all_keys": gemini_keys,
+                    })
+                    break  # Iniciamos con una sola key; la rotación ocurre en caso de fallo
+
+        # ── Groq (multi-key con rotador) ──
+        if groq_keys:
+            groq_model = "llama-3.1-70b-versatile" if is_complex_agent else "llama-3.1-8b-instant"
+            active_key = get_active_key("groq", groq_keys)
+            if active_key:
+                provider_slots.append({
+                    "name": f"Groq[{groq_keys.index(active_key)}]",
+                    "url": "https://api.groq.com/openai/v1/chat/completions",
+                    "key": active_key,
+                    "model": groq_model,
+                    "is_anthropic": False,
+                    "pool_name": "groq",
+                    "all_keys": groq_keys,
+                })
+
+        # ── Anthropic (key única) ──
         if anthropic_key:
-            providers.append({
+            provider_slots.append({
                 "name": "Anthropic",
                 "url": "https://api.anthropic.com/v1/messages",
                 "key": anthropic_key,
                 "model": "claude-3-5-sonnet-20241022",
-                "is_anthropic": True
+                "is_anthropic": True,
+                "pool_name": None,
+                "all_keys": [],
             })
+
+        # ── OpenAI (key única) ──
         if openai_key:
-            providers.append({
+            provider_slots.append({
                 "name": "OpenAI",
                 "url": "https://api.openai.com/v1/chat/completions",
                 "key": openai_key,
                 "model": "gpt-4o",
-                "is_anthropic": False
-            })
-        if nvidia_key:
-            providers.append({
-                "name": "NVIDIA NIM",
-                "url": "https://integrate.api.nvidia.com/v1/chat/completions",
-                "key": nvidia_key,
-                "model": "meta/llama-3.1-8b-instruct",
-                "is_anthropic": False
+                "is_anthropic": False,
+                "pool_name": None,
+                "all_keys": [],
             })
 
-        if not providers:
-            raise ValueError("No se encontraron claves de API (NVIDIA_API_KEY, OPENAI_API_KEY o ANTHROPIC_API_KEY) en config/settings.")
+        if not provider_slots:
+            raise ValueError(
+                "No hay proveedores de LLM configurados. "
+                "Añade al menos GEMINI_API_KEY o GROQ_API_KEY en tu archivo .env "
+                "(puedes poner varias separadas por coma)."
+            )
 
-        # Intentar con los proveedores en secuencia (conmutación por error)
-        import time
-        last_exception = None
+        last_exception: Optional[Exception] = None
+        # Rastrear qué keys de cada pool ya intentamos en esta llamada
+        tried_keys: Dict[str, List[str]] = {"gemini": [], "groq": []}
 
-        for provider in providers:
+        # ── Bucle principal: proveedor → reintentos → rotación de key ──
+        provider_index = 0
+        while provider_index < len(provider_slots):
+            provider = provider_slots[provider_index]
+
+            # Si es un pool multi-key, buscar la siguiente key no intentada
+            pool_name = provider.get("pool_name")
+            all_keys = provider.get("all_keys", [])
+            current_key = provider["key"]
+
+            if pool_name and current_key in tried_keys.get(pool_name, []):
+                # Esta key ya fue intentada en este ciclo, buscar la siguiente
+                next_key = None
+                for k in all_keys:
+                    if k not in tried_keys[pool_name]:
+                        next_key = k
+                        break
+                if next_key:
+                    provider = dict(provider)  # copia para no mutar el slot original
+                    provider["key"] = next_key
+                    idx = all_keys.index(next_key)
+                    provider["name"] = f"{pool_name.capitalize()}[{idx}]"
+                else:
+                    # Todas las keys del pool agotadas → siguiente proveedor
+                    logger.warning(f"[KeyRotator] {pool_name}: Pool completo agotado. Pasando al siguiente proveedor.")
+                    provider_index += 1
+                    continue
+
             logger.info(f"Intentando llamada a LLM usando proveedor: {provider['name']} ({provider['model']})")
-            
+
             if provider.get("is_anthropic"):
                 headers = {
                     "x-api-key": provider["key"],
                     "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 }
-                # Anthropic requiere extraer el mensaje system del array de mensajes
                 system_text = ""
                 filtered_messages = []
                 for msg in messages:
@@ -178,99 +265,161 @@ class WorkflowRunner:
                         system_text += msg["content"] + "\n"
                     else:
                         filtered_messages.append(msg)
-                
-                payload = {
+                payload: Dict[str, Any] = {
                     "model": provider["model"],
                     "messages": filtered_messages,
                     "max_tokens": 4000,
-                    "temperature": 0.2
+                    "temperature": 0.2,
                 }
                 if system_text:
                     payload["system"] = system_text.strip()
             else:
                 headers = {
                     "Authorization": f"Bearer {provider['key']}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 }
                 payload = {
                     "model": provider["model"],
                     "messages": messages,
-                    "temperature": 0.2
+                    "temperature": 0.2,
                 }
 
             max_retries = 2
             backoff = 2.0
+            success = False
 
             for attempt in range(max_retries):
                 try:
-                    response = requests.post(provider["url"], headers=headers, json=payload, timeout=45)
+                    response = requests.post(
+                        provider["url"], headers=headers, json=payload, timeout=45
+                    )
                     response.raise_for_status()
                     res_data = response.json()
 
-                    # Procesar y registrar uso de tokens
+                    # ── Contabilizar tokens ──
                     try:
                         usage = res_data.get("usage", {})
                         if provider.get("is_anthropic"):
                             prompt_tokens = usage.get("input_tokens", 0)
                             completion_tokens = usage.get("output_tokens", 0)
-                            # Costo de Claude 3.5 Sonnet: $3 / M input, $15 / M output
                             cost = (prompt_tokens * 0.000003) + (completion_tokens * 0.000015)
                         else:
                             prompt_tokens = usage.get("prompt_tokens", 0)
                             completion_tokens = usage.get("completion_tokens", 0)
-                            # Costo estimado de GPT-4o: $5 / M input, $15 / M output
                             cost = (prompt_tokens * 0.000005) + (completion_tokens * 0.000015)
 
-                        memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+                        memory_dir = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory"
+                        )
                         os.makedirs(memory_dir, exist_ok=True)
                         token_file = os.path.join(memory_dir, "token_usage.json")
-
-                        accumulated = {"input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0, "total_calls": 0}
+                        accumulated = {
+                            "input_tokens": 0, "output_tokens": 0,
+                            "estimated_cost_usd": 0.0, "total_calls": 0,
+                        }
                         if os.path.exists(token_file):
                             try:
-                                with open(token_file, 'r') as tf:
+                                with open(token_file, "r") as tf:
                                     accumulated = json.load(tf)
                             except Exception:
                                 pass
-
                         accumulated["input_tokens"] += prompt_tokens
                         accumulated["output_tokens"] += completion_tokens
                         accumulated["estimated_cost_usd"] += cost
                         accumulated["total_calls"] += 1
-
-                        with open(token_file, 'w') as tf:
+                        with open(token_file, "w") as tf:
                             json.dump(accumulated, tf)
-
                         try:
                             from runtime.dashboard import update_dashboard_state
                             update_dashboard_state({
                                 "input_tokens": accumulated["input_tokens"],
                                 "output_tokens": accumulated["output_tokens"],
                                 "estimated_cost_usd": accumulated["estimated_cost_usd"],
-                                "total_calls": accumulated["total_calls"]
+                                "total_calls": accumulated["total_calls"],
                             })
                         except Exception:
                             pass
                     except Exception as ex:
                         logger.warning(f"No se pudo guardar métricas de uso de tokens: {str(ex)}")
 
+                    success = True
                     if provider.get("is_anthropic"):
                         return res_data["content"][0]["text"]
                     else:
                         return res_data["choices"][0]["message"]["content"]
 
-                except Exception as e:
+                except requests.exceptions.HTTPError as e:
                     last_exception = e
+                    status_code = e.response.status_code if e.response is not None else 0
+                    error_text = e.response.text if e.response is not None else str(e)
+
+                    # ── Rotación inmediata por cuota/rate-limit ──
+                    if pool_name and is_quota_error(status_code, error_text):
+                        logger.warning(
+                            f"[KeyRotator] {provider['name']}: Error de cuota ({status_code}). "
+                            f"Rotando a siguiente key del pool '{pool_name}'."
+                        )
+                        mark_key_exhausted(pool_name, all_keys, provider["key"])
+                        if pool_name not in tried_keys:
+                            tried_keys[pool_name] = []
+                        tried_keys[pool_name].append(provider["key"])
+                        break  # Salir del bucle de reintentos; el bucle externo rotará
+
                     if attempt == max_retries - 1:
-                        logger.warning(f"Proveedor {provider['name']} falló tras {max_retries} intentos. Probando fallback si está disponible...")
+                        logger.warning(
+                            f"Proveedor {provider['name']} falló tras {max_retries} intentos. "
+                            f"Probando fallback..."
+                        )
                         break
                     sleep_time = backoff ** (attempt + 1)
-                    logger.warning(f"Error en {provider['name']} (intento {attempt + 1}/{max_retries}): {str(e)}. Reintentando en {sleep_time}s...")
+                    logger.warning(
+                        f"Error en {provider['name']} (intento {attempt+1}/{max_retries}): "
+                        f"{str(e)}. Reintentando en {sleep_time}s..."
+                    )
                     time.sleep(sleep_time)
 
+                except Exception as e:
+                    last_exception = e
+                    error_text = str(e)
 
-        # Si salimos de los bucles sin retornar, todos fallaron
-        logger.error(f"Fallo definitivo de todos los proveedores de LLM configurados.")
+                    # ── Rotación inmediata por timeout en pool multi-key ──
+                    if pool_name and ("timed out" in error_text.lower() or "timeout" in error_text.lower()):
+                        logger.warning(
+                            f"[KeyRotator] {provider['name']}: Timeout detectado. "
+                            f"Rotando key del pool '{pool_name}'."
+                        )
+                        mark_key_exhausted(pool_name, all_keys, provider["key"])
+                        if pool_name not in tried_keys:
+                            tried_keys[pool_name] = []
+                        tried_keys[pool_name].append(provider["key"])
+                        break  # Salir del bucle de reintentos; el bucle externo rotará
+
+                    if attempt == max_retries - 1:
+                        logger.warning(
+                            f"Proveedor {provider['name']} falló tras {max_retries} intentos. "
+                            f"Probando fallback..."
+                        )
+                        break
+                    sleep_time = backoff ** (attempt + 1)
+                    logger.warning(
+                        f"Error en {provider['name']} (intento {attempt+1}/{max_retries}): "
+                        f"{str(e)}. Reintentando en {sleep_time}s..."
+                    )
+                    time.sleep(sleep_time)
+
+            if success:
+                break  # Salida limpia del bucle principal
+
+            # Si el pool tiene más keys sin intentar, NO avanzar el índice de slot
+            if pool_name:
+                remaining = [k for k in all_keys if k not in tried_keys.get(pool_name, [])]
+                if remaining:
+                    continue  # Reintentar con la siguiente key del mismo slot
+
+            provider_index += 1  # Pasar al siguiente proveedor/slot
+
+        # Si salimos sin éxito
+        logger.error("Fallo definitivo de todos los proveedores de LLM configurados.")
         if last_exception:
             raise last_exception
         raise RuntimeError("Fallo definitivo de todos los proveedores de LLM configurados.")
@@ -321,31 +470,53 @@ class WorkflowRunner:
             logger.warning(f"Fallo en parseo y auto-corrección de JSON de herramienta: {str(e)}")
             return None
 
-    def _run_agent_loop(self, agent_id: str, context: Dict[str, Any], project_name: str, workflow_id: str) -> str:
+    def _run_agent_loop(self, agent_id: str, context: Dict[str, Any], project_name: str, workflow_id: str, user_request: Optional[str] = None) -> str:
         """Ejecuta un bucle interactivo de agente (Agent Loop) con el LLM y herramientas MCP."""
-        system_instruction = (
-            f"Eres el agente '{agent_id}' con el rol de '{context['role']}'.\n"
-            f"Tu objetivo principal es asistir en el desarrollo del proyecto '{project_name}'.\n\n"
-            f"Instrucciones operativas de tu rol:\n{context.get('instructions', '')}\n\n"
-            "=== DIRECTRICES DE AUTONOMÍA MCP ===\n"
-            "Puedes usar herramientas locales para cumplir tu objetivo escribiendo un bloque JSON exacto en tu respuesta:\n"
-            "```json\n"
-            "{\n"
-            "  \"tool\": \"tool_name\",\n"
-            "  \"arguments\": {\"arg1\": \"value\"}\n"
-            "}\n"
-            "```\n\n"
-            "Herramientas disponibles:\n"
-            "- `read_file`: {\"path\": \"ruta/relativa\"}\n"
-            "- `write_file`: {\"path\": \"ruta/relativa\", \"content\": \"contenido\"}\n"
-            "- `list_dir`: {\"path\": \"ruta/relativa\"}\n"
-            "- `run_command`: {\"command\": \"comando_de_consola\", \"cwd\": \"directorio\"}\n\n"
-            "Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REPORT:' seguido de tu resumen en Markdown."
-        )
+        system_instruction = f"""Eres el agente '{agent_id}' con el rol de '{context['role']}'.
+Tu objetivo principal es asistir en el desarrollo del proyecto '{project_name}'.
+
+Instrucciones operativas de tu rol:
+{context.get('instructions', '')}
+
+=== DIRECTRICES DE AUTONOMÍA MCP ===
+Puedes usar herramientas locales para cumplir tu objetivo escribiendo un bloque JSON exacto en tu respuesta:
+```json
+{{
+  "tool": "tool_name",
+  "arguments": {{"arg1": "value"}}
+}}
+```
+
+Herramientas disponibles (SOLO estas, NO inventes otras):
+- `ask_user`: {{"question": "¿Qué colores prefieres para el diseño de la tienda?"}}
+- `read_file`: {{"path": "memory/projects/{project_name}/requirements.md"}}
+- `write_file`: {{"path": "memory/projects/{project_name}/requirements.md", "content": "# Requisitos del Proyecto\\n\\n..."}}
+- `list_dir`: {{"path": "projects/{project_name}"}}
+- `search_code`: {{"query": "const database"}}
+- `run_command`: {{"command": "npm run build", "cwd": "projects/{project_name}"}}
+- `preview_project`: {{"project_type": "web-framework", "project_path": "projects/{project_name}"}}
+
+IMPORTANTE: Usa `ask_user` para entrevistar al usuario y entender qué proyecto construir. No inventes rutas de placeholders genéricos como 'ruta/relativa' o 'contenido', usa siempre rutas basadas en tu proyecto.
+NO uses herramientas como 'Apache Airflow', 'Docker Compose', 'Makefile', 'Python', 'Bash', 'npm' como herramientas MCP — no existen.
+Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REPORT:' seguido de tu resumen en Markdown."""
+
+        if agent_id == "psycho-ceo" and workflow_id == "wf-discovery":
+            system_instruction += f"""
+
+=== PROTOCOLO CENTRAL DEL CEO PARA LA ENTREVISTA ===
+1. Al iniciar, debes comprobar si ya existe un archivo de requisitos en 'memory/projects/{project_name}/requirements.md'.
+2. Si el archivo no existe o está vacío, debes solicitar al usuario los detalles del proyecto (ej. descripción, propósito, características principales) mediante la herramienta `ask_user`.
+3. Con la respuesta del usuario, genera un borrador inicial del archivo de requisitos.
+4. Si tienes dudas adicionales sobre el diseño, animaciones, logo o integraciones, usa `ask_user` para aclararlas una por una, construyendo sobre la base y preservando el borrador.
+5. Cuando todo esté definido y aclarado con el usuario, escribe el archivo final en 'memory/projects/{project_name}/requirements.md' e incluye de manera obligatoria y visible la frase "Entrevista validada" dentro de los requisitos para autorizar las siguientes fases."""
+
+        user_content = f"Por favor, ejecuta las tareas correspondientes para el paso actual de '{workflow_id}' del proyecto '{project_name}'."
+        if user_request:
+            user_content += f"\n\nSolicitud inicial del usuario:\n{user_request}"
 
         messages = [
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Por favor, ejecuta las tareas correspondientes para el paso actual de '{workflow_id}' del proyecto '{project_name}'."}
+            {"role": "user", "content": user_content}
         ]
 
         logger.info(f"Iniciando Agent Loop Real para el agente: {agent_id}")
@@ -382,7 +553,7 @@ class WorkflowRunner:
                 pass
 
             try:
-                response = self._call_llm(messages)
+                response = self._call_llm(messages, agent_id=agent_id)
             except Exception as e:
                 logger.error(f"Error llamando al LLM en el turno {turn + 1}: {str(e)}")
                 try:
@@ -473,7 +644,7 @@ class WorkflowRunner:
 
         return last_response
 
-    def run_workflow(self, workflow_id: str, project_name: str = "default_project") -> Dict:
+    def run_workflow(self, workflow_id: str, project_name: str = "default_project", user_request: Optional[str] = None) -> Dict:
         """Ejecuta la orquestación de un flujo definido."""
         self.status = "RUNNING"
         self.active_workflow_id = workflow_id
@@ -485,6 +656,32 @@ class WorkflowRunner:
         project_memory_dir = os.path.join(settings.MEMORY_DIR, "projects", project_name)
         os.makedirs(project_memory_dir, exist_ok=True)
         
+        # Gate de Autorización con requisitos validados
+        if workflow_id in ("wf-planning", "wf-implementation", "wf-build-project"):
+            req_path = os.path.join(project_memory_dir, "requirements.md")
+            if not os.path.exists(req_path):
+                self.status = "FAILED"
+                err_msg = f"No se puede iniciar '{workflow_id}' sin haber realizado el descubrimiento. Falta el archivo de requisitos: {req_path}"
+                logger.error(err_msg)
+                try:
+                    update_dashboard_state({"status": "FAILED"})
+                    add_dashboard_log(f"Fallo: {err_msg}")
+                except Exception:
+                    pass
+                return {"status": "FAIL", "error": err_msg}
+            with open(req_path, 'r', encoding='utf-8') as f:
+                req_content = f.read()
+            if "Entrevista validada" not in req_content:
+                self.status = "FAILED"
+                err_msg = f"No se puede iniciar '{workflow_id}' porque la entrevista de requisitos no ha sido validada por el CEO. Por favor, ejecuta primero 'wf-discovery' para realizar la entrevista."
+                logger.error(err_msg)
+                try:
+                    update_dashboard_state({"status": "FAILED"})
+                    add_dashboard_log(f"Fallo: {err_msg}")
+                except Exception:
+                    pass
+                return {"status": "FAIL", "error": err_msg}
+
         logger.info(f"STATUS CHANGE: {self.status} - Iniciando ejecución de workflow: {workflow_id} para proyecto: {project_name}")
         
         wf = self.workflows.get(workflow_id)
@@ -553,11 +750,16 @@ class WorkflowRunner:
                 logger.info(f"Ejecutando paso con: {agent_id} ({context['role']})")
                 
                 # Ejecutar Agent Loop real si hay claves configuradas
+                gemini_raw = getattr(settings, "GEMINI_API_KEY", "")
+                groq_raw = getattr(settings, "GROQ_API_KEY", "")
                 nvidia_key = getattr(settings, "NVIDIA_API_KEY", "")
                 openai_key = getattr(settings, "OPENAI_API_KEY", "")
-                
-                if nvidia_key or openai_key:
-                    agent_output = self._run_agent_loop(agent_id, context, project_name, workflow_id)
+                anthropic_key = getattr(settings, "ANTHROPIC_API_KEY", "")
+
+                has_provider = bool(gemini_raw or groq_raw or nvidia_key or openai_key or anthropic_key)
+
+                if has_provider:
+                    agent_output = self._run_agent_loop(agent_id, context, project_name, workflow_id, user_request=user_request)
                 else:
                     logger.warning("Corriendo en MODO SIMULACIÓN: No se configuraron claves de API en el archivo .env.")
                     try:
@@ -597,7 +799,41 @@ class WorkflowRunner:
 
         # Quality Gate Integrado si es implementación o evaluación
         gate_result = None
-        if "agent-evaluator" in steps_execution or "backend" in steps_execution:
+        
+        # 1. Quality Gates para especificaciones de memoria (Discovery y Planning)
+        if self.status == "RUNNING" or self.status == "SUCCESS":
+            if workflow_id == "wf-discovery":
+                req_path = os.path.join(project_memory_dir, "requirements.md")
+                if not os.path.exists(req_path):
+                    self.status = "FAILED"
+                    gate_result = {"status": "FAIL", "errors": [f"El archivo {req_path} no fue creado."]}
+                else:
+                    with open(req_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    if len(content) < 500 or "Entrevista validada" not in content:
+                        self.status = "FAILED"
+                        gate_result = {
+                            "status": "FAIL",
+                            "errors": [f"El archivo {req_path} no cumple los requisitos mínimos (longitud actual: {len(content)}/500, contiene 'Entrevista validada': {'Entrevista validada' in content})."]
+                        }
+            elif workflow_id == "wf-planning":
+                arch_path = os.path.join(project_memory_dir, "architecture.md")
+                if not os.path.exists(arch_path):
+                    self.status = "FAILED"
+                    gate_result = {"status": "FAIL", "errors": [f"El archivo {arch_path} no fue creado."]}
+                else:
+                    with open(arch_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    has_sections = "##" in content
+                    if len(content) < 500 or not has_sections:
+                        self.status = "FAILED"
+                        gate_result = {
+                            "status": "FAIL",
+                            "errors": [f"El archivo {arch_path} no cumple los requisitos mínimos (longitud actual: {len(content)}/500, secciones principales presentes: {has_sections})."]
+                        }
+
+        # 2. Quality Gate para código (Implementación/Evaluación)
+        if (self.status == "RUNNING" or self.status == "SUCCESS") and ("agent-evaluator" in steps_execution or "backend" in steps_execution):
             project_path = os.path.join(self.projects_dir, project_name)
             logger.info(f"Iniciando Quality Gate para {project_path}...")
             try:
@@ -627,7 +863,8 @@ class WorkflowRunner:
         try:
             from auto_learner import AutoLearner
             learner = AutoLearner()
-            q_errors = gate_result.get("errors", []) if gate_result else []
+            q_errors_raw = gate_result.get("errors", []) if isinstance(gate_result, dict) else []
+            q_errors = q_errors_raw if isinstance(q_errors_raw, list) else [str(q_errors_raw)] if q_errors_raw else []
             session_log_id = f"{project_name}_{workflow_id}"
             learner.extract_and_learn(session_id=session_log_id, workflow_id=workflow_id, status=self.status, quality_errors=q_errors)
         except Exception as le:
@@ -682,8 +919,15 @@ class WorkflowRunner:
 
 if __name__ == "__main__":
     import sys
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Psycho503 Dev AI Agency — Workflow Runner")
+    parser.add_argument("workflow_id", nargs="?", default="wf-discovery", help="ID del workflow a ejecutar")
+    parser.add_argument("project_name", nargs="?", default="demo-project", help="Nombre del proyecto")
+    parser.add_argument("--request", "-r", help="Descripción o solicitud inicial del proyecto")
+    
+    args = parser.parse_args()
+    
     runner = WorkflowRunner()
-    wf_id = sys.argv[1] if len(sys.argv) > 1 else "wf-discovery"
-    prj_name = sys.argv[2] if len(sys.argv) > 2 else "demo-project"
-    result = runner.run_workflow(wf_id, prj_name)
+    result = runner.run_workflow(args.workflow_id, args.project_name, user_request=args.request)
     print(json.dumps(result, indent=2))

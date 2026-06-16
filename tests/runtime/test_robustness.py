@@ -40,12 +40,12 @@ def test_llm_dynamic_failover():
     runner = WorkflowRunner()
     
     # Simular claves en settings
-    with patch("config.settings.NVIDIA_API_KEY", "nvidia_mock_key"), \
+    with patch("config.settings.GEMINI_API_KEY", "gemini_mock_key"), \
          patch("config.settings.OPENAI_API_KEY", "openai_mock_key"):
         
-        # Simulamos que requests.post da error para Nvidia NIM y responde OK para OpenAI
+        # Simulamos que requests.post da error para Gemini y responde OK para OpenAI
         mock_response_fail = MagicMock()
-        mock_response_fail.raise_for_status.side_effect = Exception("Nvidia service down")
+        mock_response_fail.raise_for_status.side_effect = Exception("Gemini service down")
 
         mock_response_ok = MagicMock()
         mock_response_ok.returncode = 200
@@ -58,7 +58,7 @@ def test_llm_dynamic_failover():
         with patch("requests.post", side_effect=[mock_response_fail, mock_response_fail, mock_response_ok]) as mock_post:
             res = runner._call_llm([{"role": "user", "content": "test"}])
             assert res == "OpenAI Fallback Response"
-            # Tuvo 2 intentos fallidos con Nvidia y el tercero fue exitoso con OpenAI
+            # Tuvo 2 intentos fallidos con Gemini y el tercero fue exitoso con OpenAI
             assert mock_post.call_count == 3
 
 def test_graceful_shutdown_docker_cleanup():
@@ -110,15 +110,23 @@ def test_memory_isolation_by_project():
     executor = McpExecutor()
     executor.active_project_name = "test-project-alpha"
     
-    # Ruta del archivo de requerimientos del proyecto
-    project_req_path = executor._resolve_path("memory/requirements.md")
+    # Simular una ruta base de workspace que contiene la palabra "projects" (simulando bug de Windows/rutas)
+    simulated_base_dir = os.path.abspath(os.path.join("C:\\", "Users", "Gammer", "projects", "dev-psycho-ai-agency"))
+    executor.base_dir = simulated_base_dir
+    
+    # Ruta de entrada simulada
+    input_path = os.path.join(simulated_base_dir, "memory", "requirements.md")
+    project_req_path = executor._resolve_path(input_path)
+    
     # Debería contener el subdirectorio del proyecto
-    assert os.path.join("projects", "test-project-alpha", "requirements.md") in project_req_path
+    expected_req_path = os.path.abspath(os.path.join(simulated_base_dir, "memory", "projects", "test-project-alpha", "requirements.md"))
+    assert os.path.normpath(expected_req_path) == os.path.normpath(project_req_path)
     
     # Archivos globales no deberían desviarse
-    global_lessons_path = executor._resolve_path("memory/lessons_learned.md")
-    assert os.path.join("projects", "test-project-alpha", "lessons_learned.md") not in global_lessons_path
-    assert "lessons_learned.md" in global_lessons_path
+    global_input_path = os.path.join(simulated_base_dir, "memory", "lessons_learned.md")
+    global_lessons_path = executor._resolve_path(global_input_path)
+    assert "test-project-alpha" not in global_lessons_path
+    assert os.path.normpath(global_input_path) == os.path.normpath(global_lessons_path)
 
 
 def test_telegram_notifier_missing_credentials():
