@@ -564,7 +564,7 @@ class WorkflowRunner:
         try:
             from auto_learner import AutoLearner
             learner = AutoLearner()
-            q_errors = gate_result["errors"] if gate_result else None
+            q_errors = gate_result.get("errors", []) if gate_result else []
             learner.extract_and_learn(session_id=workflow_id, workflow_id=workflow_id, status=self.status, quality_errors=q_errors)
         except Exception as le:
             logger.warning(f"No se pudo ejecutar el autoaprendizaje al final del workflow: {str(le)}")
