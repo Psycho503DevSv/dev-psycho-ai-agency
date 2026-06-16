@@ -7,10 +7,13 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # Force UTF-8 encoding on Windows to prevent UnicodeEncodeError in console
-if sys.platform == "win32":
+if sys.platform == "win32" and "pytest" not in sys.modules:
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+    except (AttributeError, io.UnsupportedOperation):
+        pass
 
 from config import settings
 
