@@ -374,12 +374,12 @@ class McpExecutor:
         # Validar el resultado de la ejecución con Pydantic antes de retornarlo
         try:
             validated_output = ExecutionResultSchema(
-                status=raw_res["status"],
-                stdout=raw_res.get("stdout", ""),
-                stderr=raw_res.get("stderr", ""),
-                code=raw_res.get("code", -1),
-                sandbox=raw_res.get("sandbox", "local"),
-                message=raw_res.get("message")
+                status=str(raw_res["status"]),
+                stdout=str(raw_res.get("stdout") or ""),
+                stderr=str(raw_res.get("stderr") or ""),
+                code=int(raw_res.get("code") if raw_res.get("code") is not None else -1),
+                sandbox=str(raw_res.get("sandbox", "local")),
+                message=str(raw_res.get("message")) if raw_res.get("message") is not None else None
             )
             return validated_output.model_dump()
         except Exception as ve:
