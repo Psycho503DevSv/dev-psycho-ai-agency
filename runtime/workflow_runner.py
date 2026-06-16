@@ -95,7 +95,6 @@ class WorkflowRunner:
 
         # 3. Notificar al dashboard
         try:
-            from runtime.dashboard import update_dashboard_state, add_dashboard_log
             update_dashboard_state({"status": "INTERRUPTED"})
             add_dashboard_log("[SHUTDOWN] Motor del agente interrumpido y cerrado ordenadamente.")
         except Exception:
@@ -315,7 +314,6 @@ class WorkflowRunner:
             
             # Notificar al dashboard en vivo
             try:
-                from runtime.dashboard import update_dashboard_state, add_dashboard_log
                 update_dashboard_state({
                     "status": "RUNNING",
                     "active_agent": agent_id,
@@ -432,7 +430,6 @@ class WorkflowRunner:
             self.status = "FAILED"
             logger.error(f"STATUS CHANGE: {self.status} - Workflow no encontrado: {workflow_id}")
             try:
-                from runtime.dashboard import update_dashboard_state, add_dashboard_log
                 update_dashboard_state({"status": "FAILED"})
                 add_dashboard_log(f"Fallo: Workflow {workflow_id} no encontrado.")
             except Exception:
@@ -441,7 +438,6 @@ class WorkflowRunner:
 
         # Iniciar servidor de dashboard en background de forma automática si no está ya arriba
         try:
-            from runtime.dashboard import start_dashboard_server, update_dashboard_state, add_dashboard_log
             start_dashboard_server()
             update_dashboard_state({
                 "status": "RUNNING",
