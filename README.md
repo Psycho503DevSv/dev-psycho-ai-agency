@@ -7,7 +7,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/Psycho503DevSv/dev-psycho-ai-agency?style=for-the-badge)](https://github.com/Psycho503DevSv/dev-psycho-ai-agency/commits/main)
 
 > **Un Sistema Operativo de Desarrollo de Software Multi-Agente autónomo, vergas y premium.**
-> Orquesta un equipo de especialistas virtuales que diseñan, planifican, construyen, auditan y previsualizan proyectos de software reales mediante flujos automatizados utilizando la API de NVIDIA NIM y OpenAI.
+> Orquesta un equipo de especialistas virtuales que diseñan, planifican, auditan y previsualizan proyectos de software reales mediante flujos automatizados utilizando la API de NVIDIA NIM, OpenAI y Anthropic.
 
 ---
 
@@ -15,7 +15,12 @@
 
 Imagínate una empresa de desarrollo de software de alto rendimiento donde **cada empleado es un agente de Inteligencia Artificial especializado**. Hay un CEO que dirige y orquesta, un Product Manager que define y traduce tus ideas a especificaciones técnicas, un Frontend que diseña interfaces interactivas, un Backend que construye APIs robustas, un QA que valida la funcionalidad de cada componente, y un Security Engineer que audita el código buscando vulnerabilidades antes de cada entrega.
 
-**PsychoSv_503 AI DevOS** es exactamente eso: un ecosistema multi-agente donde tú eres el director y el equipo de agentes autónomos colabora para construir software real en tu máquina. A diferencia de las bibliotecas de prompts tradicionales que solo producen fragmentos aislados de texto, este sistema funciona como una **agencia autónoma de producción real**. El equipo lee y escribe archivos, ejecuta comandos de consola, audita dependencias, y renderiza visualizaciones automáticas de los proyectos en desarrollo mediante el protocolo **MCP (Model Context Protocol)** y un orquestador persistente.
+### 🔄 Modelo de Trabajo Híbrido (Agente + IDE)
+Es fundamental entender que **PsychoSv_503 AI DevOS** no está diseñado para que el agente escriba todo el código de forma aislada.
+* **El Agente (DevOS)** actúa como el **Orquestador, Quality Gate y Auto-Trainer**: Define la arquitectura, crea especificaciones, audita vulnerabilidades, valida la sintaxis y cobertura del código, y usa las llaves de API para autoentrenarse analizando logs y escribiendo lecciones aprendidas en `memory/lessons_learned.md`.
+* **Las Herramientas e IDEs de IA (OpenCode, Antigravity, Claude o Gemini CLI)** se encargan de la **escritura real del código** y maquetación visual premium a partir de las directrices y validaciones del agente.
+
+Esta separación de responsabilidades garantiza la mayor calidad de código posible, elimina preguntas repetitivas innecesarias del agente y optimiza el consumo de tokens en entornos de producción multi-PC. El equipo de DevOS lee y escribe archivos, ejecuta comandos de consola, audita dependencias, y renderiza visualizaciones automáticas de los proyectos en desarrollo mediante el protocolo **MCP (Model Context Protocol)** y un orquestador persistente.
 
 ---
 
@@ -295,7 +300,7 @@ Este sistema operativo multi-agente está diseñado para integrarse con herramie
 * [ ] Implementación de RAG semántico local para bases de datos vectoriales en disco.
 * [ ] Integración nativa de Playwright para generación y ejecución de pruebas end-to-end automáticas por el agente QA.
 * [ ] Contenedores Docker pre-configurados para el empaquetado seguro de entornos de desarrollo.
-* [ ] Dashboard web visual interactivo para monitorear el flujo de mensajes de los agentes en tiempo real.
+* [x] Dashboard web visual interactivo para monitorear el flujo de mensajes de los agentes en tiempo real (Military Command Center).
 
 ---
 

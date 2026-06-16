@@ -57,3 +57,50 @@ When a workflow runs:
    - Save the outcome of the step in the `MemoryEngine`.
 3. **Quality Gating**: Once steps finish, the `QualityGate` evaluates the project workspace.
 4. **Auto-Learning**: The `AutoLearner` parses execution details and logs, updating the global `lessons_learned.md` registry with tips for future workflows.
+
+---
+
+## 4. Multi-PC Deployment & Hybrid Workflow
+
+To successfully run and deploy Psycho AI DevOS across multiple environments, it is critical to understand the separation of responsibilities:
+
+### 4.1. The Hybrid Workflow Model
+* **The DevOS Agent is the Orchestrator, Quality Gate, and Auto-Trainer:**
+  * It sequences steps and agents.
+  * It runs checks, security audits, and verifies code compilation.
+  * It auto-trains itself via the **AutoLearner** using API keys (`.env`) to read session logs and write `memory/lessons_learned.md`.
+  * It does NOT write the bulk of code or design from scratch; it coordinates and validates.
+* **The Coding is Done by the Developer IDE / Local AI:**
+  * Writing code, styling, and premium features are produced by your development environments (e.g., Antigravity, OpenCode, Claude, or Gemini CLI).
+  * This hybrid approach maximizes code quality, minimizes token usage, and guarantees autonomous quality gating.
+
+### 4.2. Setting Up on a New PC
+Follow these steps to deploy on any new machine:
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/Psycho503DevSv/dev-psycho-ai-agency.git
+   cd dev-psycho-ai-agency
+   ```
+2. **Run the One-Click Setup Script** (PowerShell on Windows):
+   ```powershell
+   .\install.ps1
+   ```
+   *This script will create the virtual environment, upgrade pip, install all production & testing dependencies, set up a template `.env` if none exists, and run the test suite to verify the setup is healthy.*
+3. **Configure Environment Keys**:
+   Edit the generated `.env` file and set up your API keys:
+   ```env
+   OPENAI_API_KEY=your_openai_key
+   NVIDIA_API_KEY=your_nvidia_key
+   ANTHROPIC_API_KEY=your_anthropic_key
+   ```
+4. **Access the Real-time Observability Dashboard**:
+   Open your browser at `http://localhost:8050` to view active logs, task statuses, and interact with the agents' `ask_user` prompts.
+5. **Run the System**:
+   Execute workflows using Python:
+   ```powershell
+   .venv\Scripts\python.exe setup.py --run
+   ```
+   Or run the workflow runner directly:
+   ```powershell
+   .venv\Scripts\python.exe -m runtime.workflow_runner wf-build-project my-app-name
+   ```
