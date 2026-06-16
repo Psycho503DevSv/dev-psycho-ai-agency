@@ -6,6 +6,13 @@ import sys
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
+# Garantizar resolución de imports agregando el directorio raíz a sys.path
+import os
+import sys
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 # Force UTF-8 encoding on Windows to prevent UnicodeEncodeError in console
 if sys.platform == "win32" and "pytest" not in sys.modules:
     import io
