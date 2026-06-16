@@ -325,8 +325,34 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         .info-label { color: #9ca3af; font-family: 'Orbitron', sans-serif; font-size: 0.85rem; }
         .info-value { font-weight: 600; color: var(--cyan); font-family: 'Share Tech Mono', monospace; font-size: 1.05rem; }
 
-        .terminal-card {
+        .terminal-card, .span-2 {
             grid-column: span 2;
+        }
+
+        @media (max-width: 900px) {
+            header {
+                flex-direction: column;
+                gap: 16px;
+                text-align: center;
+                align-items: center;
+            }
+            .terminal-card, .span-2 {
+                grid-column: span 1 !important;
+            }
+            body {
+                padding: 12px;
+            }
+            h1 {
+                font-size: clamp(1.8rem, 5vw, 2.5rem);
+            }
+            .metric {
+                font-size: 2.2rem;
+            }
+            .terminal {
+                height: 280px;
+                font-size: 0.85rem;
+                padding: 12px;
+            }
         }
 
         .terminal {
@@ -565,22 +591,24 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     </div>
 
     <div class="grid">
-        <div class="card" style="grid-column: span 2;">
+        <div class="card span-2">
             <h2>Últimas Herramientas Ejecutadas (MCP)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Herramienta</th>
-                        <th>Argumentos</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody id="tool-table-body">
-                    <tr>
-                        <td colspan="3" style="text-align: center; color: #9ca3af; font-family: 'Share Tech Mono', monospace;">Ninguna herramienta ejecutada aún</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Herramienta</th>
+                            <th>Argumentos</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tool-table-body">
+                        <tr>
+                            <td colspan="3" style="text-align: center; color: #9ca3af; font-family: 'Share Tech Mono', monospace;">Ninguna herramienta ejecutada aún</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="card">
