@@ -2,7 +2,7 @@ import os
 import re
 import sys
 import subprocess
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Force UTF-8 encoding on Windows to prevent UnicodeEncodeError in console
 if sys.platform == "win32":
@@ -22,7 +22,7 @@ _USE_DOCKER_SB    = os.environ.get("USE_DOCKER_SANDBOX", "false").lower() == "tr
 _DOCKER_CONTAINER = os.environ.get("AGENT_CONTAINER_NAME", "psycho503_agent")
 
 class McpExecutor:
-    def __init__(self, base_dir: str = None):
+    def __init__(self, base_dir: Optional[str] = None):
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
