@@ -588,7 +588,7 @@ class WorkflowRunner:
             "project_name": project_name,
             "status": "SUCCESS",
             "executed_steps": steps_execution,
-            "output_expected": wf.get("output_file").format(project_name=project_name)
+            "output_expected": wf.get("output_file").format(project_name=project_name) if wf.get("output_file") else None
         }
         
         self.status = "SUCCESS"
