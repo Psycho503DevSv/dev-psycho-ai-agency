@@ -23,6 +23,11 @@ import subprocess
 import argparse
 import textwrap
 from pathlib import Path
+# Force UTF-8 encoding on Windows to prevent UnicodeEncodeError in console
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 # ─── Colores ANSI ────────────────────────────────────────────────────────────
 class C:
@@ -36,7 +41,7 @@ class C:
     PURPLE = "\033[95m"
 
 def colored(text: str, *codes: str) -> str:
-    return "".join(codes) + str(text) + C.RESET
+    return "".join(codes) + text + C.RESET
 
 def ok(msg):    print(colored(f"  ✅  {msg}", C.GREEN))
 def warn(msg):  print(colored(f"  ⚠️   {msg}", C.YELLOW))
@@ -65,14 +70,14 @@ def check_python() -> bool:
     return False
 
 def check_pip_deps() -> bool:
-    required = ["requests", "openai", "dotenv"]
+    required = ["requests", "graphiti-core", "openai", "python-dotenv", "nest-asyncio", "pydantic", "pytest"]
     missing = []
     for pkg in required:
         import importlib.util
         spec = importlib.util.find_spec(pkg.replace("-", "_"))
         if spec is None:
             # Alias especial
-            if pkg == "dotenv":
+            if pkg in ("dotenv", "python-dotenv"):
                 spec = importlib.util.find_spec("dotenv")
             if spec is None:
                 missing.append(pkg)
@@ -236,7 +241,17 @@ def print_banner():
     ║   Autonomous AI agent with MCP, RAG & Auto-learning     ║
     ╚══════════════════════════════════════════════════════════╝
     {C.RESET}""")
-    print(banner)
+    try:
+        print(banner)
+    except UnicodeEncodeError:
+        fallback = textwrap.dedent(f"""
+        {C.PURPLE}{C.BOLD}
+        +----------------------------------------------------------+
+        |   [OS]  Psycho503 Dev AI Agency  --  Setup Wizard v1.5   |
+        |   Autonomous AI agent with MCP, RAG & Auto-learning     |
+        +----------------------------------------------------------+
+        {C.RESET}""")
+        print(fallback)
 
 def main():
     parser = argparse.ArgumentParser(
