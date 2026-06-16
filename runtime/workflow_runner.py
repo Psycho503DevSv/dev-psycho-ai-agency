@@ -5,6 +5,13 @@ import signal
 import sys
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+
+# Force UTF-8 encoding on Windows to prevent UnicodeEncodeError in console
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 from config import settings
 
 
