@@ -478,7 +478,13 @@ class WorkflowRunner:
         self.status = "RUNNING"
         self.active_workflow_id = workflow_id
         self.active_project_name = project_name
+        self.mcp_executor.active_project_name = project_name
         self.active_steps_completed = []
+        
+        # Crear directorio de memoria aislado para el proyecto
+        project_memory_dir = os.path.join(settings.MEMORY_DIR, "projects", project_name)
+        os.makedirs(project_memory_dir, exist_ok=True)
+        
         logger.info(f"STATUS CHANGE: {self.status} - Iniciando ejecución de workflow: {workflow_id} para proyecto: {project_name}")
         
         wf = self.workflows.get(workflow_id)
@@ -536,7 +542,7 @@ class WorkflowRunner:
                 return {"status": "FAIL", "error": error_msg, "completed_steps": steps_execution}
             
             try:
-                context = self.agent_loader.get_agent_context(agent_id)
+                context = self.agent_loader.get_agent_context(agent_id, project_name)
                 if not context:
                     error_msg = f"No se pudo cargar el contexto para el agente {agent_id}"
                     logger.error(error_msg)
@@ -561,7 +567,8 @@ class WorkflowRunner:
                     agent_output = f"SIMULATED REPORT for {agent_id}"
 
                 # Registrar en memoria
-                self.memory.save_memory(workflow_id, {
+                session_log_id = f"{project_name}_{workflow_id}"
+                self.memory.save_memory(session_log_id, {
                     "project": project_name,
                     "step": agent_id,
                     "status": "success",
@@ -621,7 +628,8 @@ class WorkflowRunner:
             from auto_learner import AutoLearner
             learner = AutoLearner()
             q_errors = gate_result.get("errors", []) if gate_result else []
-            learner.extract_and_learn(session_id=workflow_id, workflow_id=workflow_id, status=self.status, quality_errors=q_errors)
+            session_log_id = f"{project_name}_{workflow_id}"
+            learner.extract_and_learn(session_id=session_log_id, workflow_id=workflow_id, status=self.status, quality_errors=q_errors)
         except Exception as le:
             logger.warning(f"No se pudo ejecutar el autoaprendizaje al final del workflow: {str(le)}")
 
@@ -637,6 +645,27 @@ class WorkflowRunner:
             pass
 
         if self.status == "FAILED":
+            try:
+                from runtime.notifier import send_telegram_notification
+                err_msg = "Error de ejecución de pasos o agentes."
+                if gate_result and gate_result.get("errors"):
+                    err_msg = "Errores del Quality Gate:\n" + "\n".join([f"• {err}" for err in gate_result.get("errors")])
+                elif wf:
+                    failed_steps = [s for s in wf.get("steps", []) if s not in steps_execution]
+                    if failed_steps:
+                        err_msg = f"Fallo al ejecutar el agente/paso: {failed_steps[0]}"
+                
+                telegram_msg = (
+                    f"🚨 <b>Psycho AI DevOS - ALERTA DE FALLO</b> 🚨\n\n"
+                    f"<b>Proyecto:</b> <code>{project_name}</code>\n"
+                    f"<b>Workflow:</b> <code>{workflow_id}</code>\n"
+                    f"<b>Estado Final:</b> <code>{self.status}</code>\n\n"
+                    f"<b>Detalle del Error:</b>\n{err_msg}"
+                )
+                send_telegram_notification(telegram_msg)
+            except Exception as ne:
+                logger.warning(f"Error enviando notificación Telegram: {str(ne)}")
+
             return {"status": "FAIL", "error": "Workflow execution failed or Quality Gate errors", "details": gate_result}
 
         report = {

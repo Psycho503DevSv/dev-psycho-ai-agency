@@ -27,6 +27,7 @@ _DOCKER_CONTAINER = os.environ.get("AGENT_CONTAINER_NAME", "psycho503_agent")
 class McpExecutor:
     def __init__(self, base_dir: Optional[str] = None):
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.active_project_name: Optional[str] = None
 
 
     def execute_tool(self, tool_name: str, arguments: Dict[str, Any], agent_role: Optional[str] = None) -> Dict[str, Any]:
@@ -72,16 +73,28 @@ class McpExecutor:
             return res
 
     def _resolve_path(self, path: str) -> str:
-        """Resuelve y valida que la ruta esté dentro del workspace base."""
+        """Resuelve y valida que la ruta esté dentro del workspace base, aislando la memoria por proyecto."""
         if not os.path.isabs(path):
-            path = os.path.abspath(os.path.join(self.base_dir, path))
+            resolved_path = os.path.abspath(os.path.join(self.base_dir, path))
         else:
-            path = os.path.abspath(path)
+            resolved_path = os.path.abspath(path)
             
         # Seguridad básica para evitar salirse del workspace
-        if not path.startswith(os.path.abspath(self.base_dir)):
-            raise PermissionError(f"Acceso denegado fuera del workspace: {path}")
-        return path
+        if not resolved_path.startswith(os.path.abspath(self.base_dir)):
+            raise PermissionError(f"Acceso denegado fuera del workspace: {resolved_path}")
+            
+        # Aislamiento de archivos de memoria por proyecto
+        memory_dir_abs = os.path.abspath(os.path.join(self.base_dir, "memory"))
+        if self.active_project_name and resolved_path.startswith(memory_dir_abs):
+            filename = os.path.basename(resolved_path)
+            # Excepciones globales que no se aíslan por proyecto
+            is_global = filename in ["lessons_learned.md", "token_usage.json", "security_audit.log"] or "projects" in resolved_path.replace("\\", "/").split("/")
+            
+            if not is_global:
+                relative_subpath = os.path.relpath(resolved_path, memory_dir_abs)
+                resolved_path = os.path.abspath(os.path.join(memory_dir_abs, "projects", self.active_project_name, relative_subpath))
+                
+        return resolved_path
 
     def _log_security_violation(self, reason: str, details: str):
         """Registra incidentes de seguridad en el archivo de auditoría centralizado."""

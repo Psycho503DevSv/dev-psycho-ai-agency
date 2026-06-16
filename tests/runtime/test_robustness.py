@@ -104,3 +104,54 @@ def test_role_based_command_permissions():
         res_py = executor.execute_tool("run_command", {"command": "python -m pytest"}, agent_role="backend-developer")
         assert "Acceso Denegado" not in str(res_py.get("error", ""))
 
+
+def test_memory_isolation_by_project():
+    """Verifica que McpExecutor resuelva y desvíe correctamente las rutas de memoria por proyecto."""
+    executor = McpExecutor()
+    executor.active_project_name = "test-project-alpha"
+    
+    # Ruta del archivo de requerimientos del proyecto
+    project_req_path = executor._resolve_path("memory/requirements.md")
+    # Debería contener el subdirectorio del proyecto
+    assert os.path.join("projects", "test-project-alpha", "requirements.md") in project_req_path
+    
+    # Archivos globales no deberían desviarse
+    global_lessons_path = executor._resolve_path("memory/lessons_learned.md")
+    assert os.path.join("projects", "test-project-alpha", "lessons_learned.md") not in global_lessons_path
+    assert "lessons_learned.md" in global_lessons_path
+
+
+def test_telegram_notifier_missing_credentials():
+    """Verifica que el notificador retorne False si faltan credenciales."""
+    from runtime.notifier import send_telegram_notification
+    with patch("config.settings.TELEGRAM_BOT_TOKEN", ""), \
+         patch("config.settings.TELEGRAM_CHAT_ID", ""):
+        assert send_telegram_notification("test error") is False
+
+
+def test_telegram_notifier_success():
+    """Verifica que se envíe la petición HTTP y retorne True ante éxito."""
+    from runtime.notifier import send_telegram_notification
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    
+    with patch("config.settings.TELEGRAM_BOT_TOKEN", "123:abc"), \
+         patch("config.settings.TELEGRAM_CHAT_ID", "987654"), \
+         patch("requests.post", return_value=mock_resp) as mock_post:
+        assert send_telegram_notification("test message") is True
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert "sendMessage" in args[0]
+        assert kwargs["json"]["chat_id"] == "987654"
+
+
+def test_telegram_notifier_failure():
+    """Verifica que retorne False si la petición HTTP falla."""
+    from runtime.notifier import send_telegram_notification
+    with patch("config.settings.TELEGRAM_BOT_TOKEN", "123:abc"), \
+         patch("config.settings.TELEGRAM_CHAT_ID", "987654"), \
+         patch("requests.post", side_effect=Exception("API Error")):
+        assert send_telegram_notification("test message") is False
+
+
+

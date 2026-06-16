@@ -62,7 +62,7 @@ class AgentLoader:
             sanitized = re.sub(pattern, replacement, sanitized)
         return sanitized
 
-    def build_context_for_agent(self, agent_id: str) -> Optional[Dict]:
+    def build_context_for_agent(self, agent_id: str, project_name: Optional[str] = None) -> Optional[Dict]:
         """Construye un contexto filtrado y optimizado para un agente específico, reduciendo tokens."""
         agent = self.agents.get(agent_id)
         if not agent:
@@ -128,7 +128,11 @@ class AgentLoader:
         files_to_load = memory_mapping.get(agent_id, ["active_context.md"])
 
         for filename in files_to_load:
-            file_path = os.path.join(memory_dir, filename)
+            if project_name and filename not in ["lessons_learned.md"]:
+                file_path = os.path.join(memory_dir, "projects", project_name, filename)
+            else:
+                file_path = os.path.join(memory_dir, filename)
+                
             if os.path.exists(file_path):
                 try:
                     with open(file_path, 'r', encoding='utf-8-sig') as f:
@@ -150,9 +154,9 @@ class AgentLoader:
             "working_directory": agent["path"]
         }
 
-    def get_agent_context(self, agent_id: str) -> Optional[Dict]:
+    def get_agent_context(self, agent_id: str, project_name: Optional[str] = None) -> Optional[Dict]:
         """Mantiene compatibilidad con llamadas existentes usando el generador de contexto filtrado."""
-        return self.build_context_for_agent(agent_id)
+        return self.build_context_for_agent(agent_id, project_name)
 
 if __name__ == "__main__":
     loader = AgentLoader()

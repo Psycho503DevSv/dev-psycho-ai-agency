@@ -555,8 +555,11 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             </div>
         </div>
 
-        <div class="card terminal-card">
-            <h2>Consola Web Formateada</h2>
+        <div class="card terminal-card" style="position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2>Consola Web Formateada</h2>
+                <button onclick="copyLogsToClipboard()" class="btn-submit" style="padding: 6px 12px; font-size: 0.8rem; margin: 0; box-shadow: 0 0 10px rgba(0, 240, 255, 0.4); background: linear-gradient(90deg, var(--cyan), var(--primary));">Copiar Logs</button>
+            </div>
             <div class="terminal" id="terminal-output">Esperando ejecución de workflows...</div>
         </div>
     </div>
@@ -734,6 +737,27 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     }
                 })
                 .catch(err => console.error("Error actualizando dashboard:", err));
+        }
+
+        function copyLogsToClipboard() {
+            const term = document.getElementById('terminal-output');
+            const text = term.innerText || term.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("Logs copiados al portapapeles con éxito.");
+            }).catch(err => {
+                console.error("Error al copiar logs: ", err);
+                const textarea = document.createElement("textarea");
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand("copy");
+                    alert("Logs copiados al portapapeles con éxito (fallback).");
+                } catch (e) {
+                    alert("No se pudo copiar de forma automática. Por favor selecciona y copia manualmente.");
+                }
+                document.body.removeChild(textarea);
+            });
         }
 
         setInterval(updateDashboard, 1000);
