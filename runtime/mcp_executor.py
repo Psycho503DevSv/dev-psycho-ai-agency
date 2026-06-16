@@ -26,7 +26,7 @@ class McpExecutor:
         self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-    def execute_tool(self, tool_name: str, arguments: Dict[str, Any], agent_role: str = None) -> Dict[str, Any]:
+    def execute_tool(self, tool_name: str, arguments: Dict[str, Any], agent_role: Optional[str] = None) -> Dict[str, Any]:
         """Despacha y ejecuta herramientas simulando un servidor MCP local, verificando permisos por rol."""
         logger.info(f"Ejecutando herramienta MCP: {tool_name} para rol '{agent_role}' con argumentos: {arguments}")
         
