@@ -93,6 +93,34 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == "/api/project":
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                project_name = data.get("project", "")
+                if project_name:
+                    with _lock:
+                        _state["project_name"] = project_name
+                    # Crear directorio del proyecto en disco si no existe
+                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    project_dir = os.path.join(base_dir, "memory", "projects", project_name)
+                    os.makedirs(project_dir, exist_ok=True)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "ok", "project": project_name}).encode("utf-8"))
+                else:
+                    raise ValueError("El nombre del proyecto es requerido.")
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+            return
+
         if self.path == "/api/respond":
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
@@ -135,13 +163,53 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             with _lock:
+                # Obtener listado de proyectos disponibles en memory/projects/
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                projects_dir = os.path.join(base_dir, "memory", "projects")
+                available_projects = []
+                if os.path.exists(projects_dir):
+                    available_projects = [d for d in os.listdir(projects_dir) if os.path.isdir(os.path.join(projects_dir, d))]
+                
                 response_data = {
                     "state": _state,
                     "logs": _logs,
-                    "security_alerts": _security_alerts
+                    "security_alerts": _security_alerts,
+                    "available_projects": available_projects
                 }
             self.wfile.write(json.dumps(response_data).encode("utf-8"))
             return
+
+        if self.path.startswith("/api/requirements"):
+            # Obtener el nombre del proyecto desde query string o usar el activo
+            project_name = _state["project_name"]
+            import urllib.parse
+            parsed_url = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed_url.query)
+            if "project" in params:
+                project_name = params["project"][0]
+
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            req_path = os.path.join(base_dir, "memory", "projects", project_name, "requirements.md")
+            
+            content = ""
+            exists = False
+            if project_name and project_name != "Ninguno" and os.path.exists(req_path):
+                try:
+                    with open(req_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    exists = True
+                except Exception as e:
+                    content = f"Error leyendo requisitos: {str(e)}"
+            else:
+                content = f"No se han generado requerimientos todavía para el proyecto '{project_name}'."
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"exists": exists, "content": content, "project": project_name}).encode("utf-8"))
+            return
+
 
         if self.path in ("/", "/index.html"):
             self.send_response(200)
@@ -561,6 +629,30 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         </div>
     </div>
 
+    <!-- Panel de Selección de Proyecto y Requisitos -->
+    <div class="grid">
+        <div class="card">
+            <h2>📁 Gestión de Proyectos</h2>
+            <div style="margin-bottom: 16px;">
+                <label for="project-selector" class="info-label" style="display:block; margin-bottom:8px;">Proyecto Activo:</label>
+                <select id="project-selector" class="input-response" style="margin-bottom: 12px; width: 100%; cursor: pointer;" onchange="changeActiveProject(this.value)">
+                    <option value="Ninguno">Ninguno</option>
+                </select>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="new-project-input" class="input-response" style="margin-bottom: 0;" placeholder="Nuevo proyecto..." />
+                    <button onclick="createNewProject()" class="btn-submit" style="padding: 10px; font-size: 0.85rem;">Crear</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card terminal-card" style="grid-column: span 1 !important; display: flex; flex-direction: column;">
+            <h2>📝 Visor de Requisitos (requirements.md)</h2>
+            <div id="requirements-viewer" class="terminal" style="flex-grow: 1; height: 200px; font-family: 'Inter', sans-serif; white-space: pre-wrap; font-size: 0.9rem; padding: 15px; border-color: var(--cyan); background: rgba(0, 5, 15, 0.4);">
+                Selecciona un proyecto para cargar sus requisitos.
+            </div>
+        </div>
+    </div>
+
     <div class="grid">
         <div class="card">
             <h2>Agente Activo</h2>
@@ -581,17 +673,17 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             </div>
         </div>
 
-        <div class="card terminal-card" style="position: relative;">
+        <div class="card terminal-card" style="position: relative; grid-column: span 1 !important;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h2>Consola Web Formateada</h2>
                 <button onclick="copyLogsToClipboard()" class="btn-submit" style="padding: 6px 12px; font-size: 0.8rem; margin: 0; box-shadow: 0 0 10px rgba(0, 240, 255, 0.4); background: linear-gradient(90deg, var(--cyan), var(--primary));">Copiar Logs</button>
             </div>
-            <div class="terminal" id="terminal-output">Esperando ejecución de workflows...</div>
+            <div class="terminal" id="terminal-output" style="height: 250px;">Esperando ejecución de workflows...</div>
         </div>
     </div>
 
     <div class="grid">
-        <div class="card span-2">
+        <div class="card span-2" style="grid-column: span 1 !important;">
             <h2>Últimas Herramientas Ejecutadas (MCP)</h2>
             <div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;">
                 <table>
@@ -611,7 +703,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             </div>
         </div>
 
-        <div class="card">
+        <div class="card" style="grid-column: span 1 !important;">
             <h2>Incidentes de Seguridad</h2>
             <div id="security-alerts-container">
                 <p style="color: #9ca3af; font-size: 0.9rem; font-family: 'Share Tech Mono', monospace;">No se han detectado incidentes de seguridad.</p>
@@ -620,6 +712,8 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     </div>
 
     <script>
+        let lastProject = "";
+
         function formatLogLine(line) {
             let escaped = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
@@ -661,6 +755,46 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             .catch(err => alert("Error enviando respuesta: " + err));
         }
 
+        function changeActiveProject(projName) {
+            if (!projName || projName === lastProject) return;
+            fetch('/api/project', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project: projName })
+            })
+            .then(res => res.json())
+            .then(data => {
+                lastProject = projName;
+                updateRequirements(projName);
+            })
+            .catch(err => console.error("Error al cambiar proyecto:", err));
+        }
+
+        function createNewProject() {
+            const val = document.getElementById('new-project-input').value.trim();
+            if (!val) return;
+            // Sanitizar nombre
+            const cleanName = val.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            changeActiveProject(cleanName);
+            document.getElementById('new-project-input').value = '';
+        }
+
+        function updateRequirements(projName) {
+            const viewer = document.getElementById('requirements-viewer');
+            if (!projName || projName === 'Ninguno') {
+                viewer.textContent = 'Selecciona un proyecto para cargar sus requisitos.';
+                return;
+            }
+            fetch(`/api/requirements?project=\${encodeURIComponent(projName)}`)
+            .then(res => res.json())
+            .then(data => {
+                viewer.textContent = data.content;
+            })
+            .catch(err => {
+                viewer.textContent = "Error al conectar con la API de Requisitos: " + err;
+            });
+        }
+
         function updateDashboard() {
             fetch('/api/state')
                 .then(res => res.json())
@@ -677,6 +811,36 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     document.getElementById('val-role').textContent = data.state.active_role;
                     document.getElementById('val-project').textContent = data.state.project_name;
                     document.getElementById('val-workflow').textContent = data.state.workflow_id;
+
+                    // Actualizar selector de proyectos
+                    const selector = document.getElementById('project-selector');
+                    const currentSel = selector.value;
+                    
+                    // Reconstruir opciones si es necesario
+                    let optionsHtml = '<option value="Ninguno">Ninguno</option>';
+                    if (data.available_projects && data.available_projects.length > 0) {
+                        data.available_projects.forEach(p => {
+                            optionsHtml += `<option value="\${p}">\${p}</option>`;
+                        });
+                    }
+                    
+                    // Agregar el proyecto actual si no está en la lista disponible físicamente
+                    if (data.state.project_name && data.state.project_name !== 'Ninguno' && (!data.available_projects || !data.available_projects.includes(data.state.project_name))) {
+                        optionsHtml += `<option value="\${data.state.project_name}">\${data.state.project_name}</option>`;
+                    }
+                    
+                    selector.innerHTML = optionsHtml;
+                    
+                    // Mantener seleccionado el proyecto activo actual
+                    if (data.state.project_name) {
+                        selector.value = data.state.project_name;
+                        if (data.state.project_name !== lastProject) {
+                            lastProject = data.state.project_name;
+                            updateRequirements(lastProject);
+                        }
+                    } else {
+                        selector.value = 'Ninguno';
+                    }
 
                     // Actualizar tokens y costos
                     document.getElementById('val-cost').textContent = '$' + data.state.estimated_cost_usd.toFixed(4);
@@ -717,7 +881,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                             node.innerHTML = `
                                 <div class="step-dot"></div>
-                                <span>${step}</span>
+                                <span>\${step}</span>
                             `;
                             nodesContainer.appendChild(node);
                         });
@@ -729,7 +893,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     const term = document.getElementById('terminal-output');
                     if (data.logs.length > 0) {
                         const formattedLogs = data.logs.map(formatLogLine);
-                        term.innerHTML = formattedLogs.join('\\n');
+                        term.innerHTML = formattedLogs.join('<br>');
                         term.scrollTop = term.scrollHeight;
                     } else {
                         term.textContent = 'Esperando ejecución de workflows...';
@@ -763,6 +927,13 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     } else {
                         secContainer.innerHTML = '<p style="color: #9ca3af; font-size: 0.9rem; font-family: \'Share Tech Mono\', monospace;">No se han detectado incidentes de seguridad.</p>';
                     }
+
+                    // Auto-actualizar visor de requisitos solo cuando cambia el proyecto activo
+                    const serverProject = data.state.project_name || 'Ninguno';
+                    if (serverProject !== lastProject) {
+                        lastProject = serverProject;
+                        updateRequirements(lastProject);
+                    }
                 })
                 .catch(err => console.error("Error actualizando dashboard:", err));
         }
@@ -788,7 +959,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             });
         }
 
-        setInterval(updateDashboard, 1000);
+        setInterval(updateDashboard, 1500);
         updateDashboard();
     </script>
 </body>
