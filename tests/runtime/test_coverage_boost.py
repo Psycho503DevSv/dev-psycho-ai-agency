@@ -216,7 +216,10 @@ class TestWorkflowRunnerCoverage:
              patch("runtime.workflow_runner.WorkflowRunner._load_registry"), \
              patch("runtime.workflow_runner.WorkflowRunner._setup_shutdown_handlers"), \
              patch("config.settings.NVIDIA_API_KEY", ""), \
-             patch("config.settings.OPENAI_API_KEY", ""):
+             patch("config.settings.OPENAI_API_KEY", ""), \
+             patch("config.settings.GEMINI_API_KEY", ""), \
+             patch("config.settings.GROQ_API_KEY", ""), \
+             patch("config.settings.ANTHROPIC_API_KEY", ""):
             from runtime.workflow_runner import WorkflowRunner
             runner = WorkflowRunner()
             with pytest.raises(Exception):
@@ -297,6 +300,41 @@ class TestContextCompressorCoverage:
 # ─────────────────────────────────────────────
 
 class TestDashboardStateFunctions:
+    def setup_method(self):
+        from runtime.dashboard import _state, _logs, _security_alerts
+        self.load_patch = patch("runtime.dashboard._load_state_from_disk")
+        self.save_patch = patch("runtime.dashboard._save_state_to_disk")
+        self.load_patch.start()
+        self.save_patch.start()
+        
+        # Reset current in-memory lists/dicts to clean defaults for testing
+        _state.clear()
+        _state.update({
+            "status": "IDLE",
+            "active_agent": "Ninguno",
+            "active_role": "Ninguno",
+            "project_name": "Ninguno",
+            "workflow_id": "Ninguno",
+            "project_path": "Ninguno",
+            "memory_path": "Ninguno",
+            "total_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "recent_tool_calls": [],
+            "all_steps": [],
+            "completed_steps": [],
+            "pending_question": None,
+            "document_preview": None,
+            "web_response": None
+        })
+        _logs.clear()
+        _security_alerts.clear()
+
+    def teardown_method(self):
+        self.load_patch.stop()
+        self.save_patch.stop()
+
     def test_update_dashboard_state_known_key(self):
         from runtime.dashboard import update_dashboard_state, _state
         update_dashboard_state({"status": "RUNNING"})

@@ -19,6 +19,8 @@ _state = {
     "active_role": "Ninguno",
     "project_name": "Ninguno",
     "workflow_id": "Ninguno",
+    "project_path": "Ninguno",
+    "memory_path": "Ninguno",
     "total_calls": 0,
     "input_tokens": 0,
     "output_tokens": 0,
@@ -110,6 +112,16 @@ def update_dashboard_state(update_dict: dict):
                     _state[k] = _state[k][:10]  # Limitar a las últimas 10
                 else:
                     _state[k] = v
+                    
+        # Calcular rutas físicas basadas en el nombre del proyecto activo
+        p_name = _state.get("project_name", "Ninguno")
+        if isinstance(p_name, str) and p_name and p_name != "Ninguno":
+            _state["project_path"] = os.path.abspath(os.path.join(base_dir, "projects", p_name))
+            _state["memory_path"] = os.path.abspath(os.path.join(base_dir, "memory", "projects", p_name))
+        else:
+            _state["project_path"] = "Ninguno"
+            _state["memory_path"] = "Ninguno"
+            
         _save_state_to_disk()
 
 def add_dashboard_log(log_line: str):
@@ -273,6 +285,16 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             with _lock:
+                _load_state_from_disk()
+                p_name = _state.get("project_name", "Ninguno")
+                if isinstance(p_name, str) and p_name and p_name != "Ninguno":
+                    base_dir_api = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    _state["project_path"] = os.path.abspath(os.path.join(base_dir_api, "projects", p_name))
+                    _state["memory_path"] = os.path.abspath(os.path.join(base_dir_api, "memory", "projects", p_name))
+                else:
+                    _state["project_path"] = "Ninguno"
+                    _state["memory_path"] = "Ninguno"
+
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 memory_projects_dir = os.path.join(base_dir, "memory", "projects")
                 code_projects_dir = os.path.join(base_dir, "projects")
@@ -768,7 +790,7 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         </div>
 
         <div class="card terminal-card" style="grid-column: span 1 !important; display: flex; flex-direction: column;">
-            <h2>📝 Visor de Requisitos (requirements.md)</h2>
+            <h2>📝 Visor de Requisitos (<span id="val-requirements-filename" style="font-size: 0.85rem; font-family: 'Share Tech Mono', monospace; color: var(--cyan);">requirements.md</span>)</h2>
             <div id="requirements-viewer" class="terminal" style="flex-grow: 1; height: 200px; font-family: 'Inter', sans-serif; white-space: pre-wrap; font-size: 0.9rem; padding: 15px; border-color: var(--cyan); background: rgba(0, 5, 15, 0.4);">
                 Selecciona un proyecto para cargar sus requisitos.
             </div>
@@ -777,11 +799,13 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     <div class="grid">
         <div class="card">
-            <h2>Agente Activo</h2>
-            <div class="info-row"><span class="info-label">ID:</span><span class="info-value" id="val-agent">Ninguno</span></div>
+            <h2>Estado del Proyecto y Agente</h2>
+            <div class="info-row"><span class="info-label">Agente Activo:</span><span class="info-value" id="val-agent">Ninguno</span></div>
             <div class="info-row"><span class="info-label">Rol:</span><span class="info-value" id="val-role">Ninguno</span></div>
             <div class="info-row"><span class="info-label">Proyecto:</span><span class="info-value" id="val-project">Ninguno</span></div>
             <div class="info-row"><span class="info-label">Workflow:</span><span class="info-value" id="val-workflow">Ninguno</span></div>
+            <div class="info-row"><span class="info-label">Ruta del Proyecto:</span><span class="info-value" id="val-project-path" style="font-size: 0.82rem; word-break: break-all;">Ninguno</span></div>
+            <div class="info-row"><span class="info-label">Ruta de Memoria:</span><span class="info-value" id="val-memory-path" style="font-size: 0.82rem; word-break: break-all;">Ninguno</span></div>
         </div>
 
         <div class="card">
@@ -903,11 +927,14 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         function updateRequirements(projName) {
             const viewer = document.getElementById('requirements-viewer');
+            const reqFilename = document.getElementById('val-requirements-filename');
             if (!projName || projName === 'Ninguno') {
                 viewer.textContent = 'Selecciona un proyecto para cargar sus requisitos.';
+                if (reqFilename) reqFilename.textContent = 'requirements.md';
                 return;
             }
-            fetch(`/api/requirements?project=\${encodeURIComponent(projName)}`)
+            if (reqFilename) reqFilename.textContent = `memory/projects/${projName}/requirements.md`;
+            fetch(`/api/requirements?project=${encodeURIComponent(projName)}`)
             .then(res => res.json())
             .then(data => {
                 viewer.textContent = data.content;
@@ -933,6 +960,8 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     document.getElementById('val-role').textContent = data.state.active_role;
                     document.getElementById('val-project').textContent = data.state.project_name;
                     document.getElementById('val-workflow').textContent = data.state.workflow_id;
+                    document.getElementById('val-project-path').textContent = data.state.project_path || "Ninguno";
+                    document.getElementById('val-memory-path').textContent = data.state.memory_path || "Ninguno";
 
                     // Actualizar selector de proyectos
                     const selector = document.getElementById('project-selector');

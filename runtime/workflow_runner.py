@@ -157,7 +157,7 @@ class WorkflowRunner:
 
         # ── Gemini (multi-key con rotador) ──
         if gemini_keys:
-            gemini_model = "gemini-1.5-pro" if is_complex_agent else "gemini-1.5-flash"
+            gemini_model = getattr(settings, "GEMINI_COMPLEX_MODEL", "gemini-2.5-pro") if is_complex_agent else getattr(settings, "GEMINI_SIMPLE_MODEL", "gemini-2.0-flash")
             # Intentaremos cada key del pool en orden (la activa primero, luego las demás)
             for offset in range(len(gemini_keys)):
                 active_key = get_active_key("gemini", gemini_keys)
@@ -276,7 +276,7 @@ class WorkflowRunner:
                     payload["system"] = system_text.strip()
             elif provider.get("pool_name") == "gemini":
                 headers = {
-                    "x-goog-api-key": provider["key"],
+                    "Authorization": f"Bearer {provider['key']}",
                     "Content-Type": "application/json",
                 }
                 payload = {
@@ -968,6 +968,18 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
 
         return report
 
+def get_existing_projects(base_dir: str) -> List[str]:
+    """Obtiene la lista de nombres de proyectos que ya existen en código o memoria."""
+    import os
+    projects = set()
+    for sub in ["projects", "memory/projects"]:
+        d = os.path.join(base_dir, sub)
+        if os.path.exists(d):
+            for item in os.listdir(d):
+                if os.path.isdir(os.path.join(d, item)):
+                    projects.add(item)
+    return sorted(list(projects))
+
 if __name__ == "__main__":
     import sys
     import argparse
@@ -979,6 +991,70 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    project_name = args.project_name
+    
+    # Si se ejecuta interactivamente y el nombre de proyecto es el de demo/por defecto, preguntar al usuario
+    if ("pytest" not in sys.modules) and (project_name == "demo-project"):
+        if sys.stdin and hasattr(sys.stdin, 'isatty') and sys.stdin.isatty():
+            try:
+                print("\n" + "═"*60)
+                print("🧠  INICIALIZACIÓN DE PROYECTO — Psycho503 Dev AI Agency")
+                print("═"*60)
+                
+                # Obtener proyectos existentes
+                existing = get_existing_projects(ROOT_DIR)
+                if existing:
+                    print("📁 Proyectos detectados:")
+                    for idx, p in enumerate(existing, 1):
+                        print(f"  {idx}) {p}")
+                    print(f"  N) [Crear nuevo proyecto]")
+                    print("═"*60)
+                    
+                    while True:
+                        sel = input("👉 Seleccione un proyecto (número) o 'N' para uno nuevo: ").strip().lower()
+                        if sel == 'n':
+                            # Pedir nombre de nuevo proyecto
+                            while True:
+                                name_input = input("✍️ Ingrese el nombre del nuevo proyecto: ").strip()
+                                if name_input:
+                                    import re
+                                    clean_name = re.sub(r'[^a-zA-Z0-9_-]', '-', name_input.lower())
+                                    clean_name = re.sub(r'-+', '-', clean_name).strip('-')
+                                    if clean_name:
+                                        project_name = clean_name
+                                        break
+                                    else:
+                                        print("❌ Nombre de proyecto inválido. Intente de nuevo.")
+                                else:
+                                    print("❌ El nombre del proyecto no puede estar vacío.")
+                            break
+                        elif sel.isdigit() and 1 <= int(sel) <= len(existing):
+                            project_name = existing[int(sel) - 1]
+                            break
+                        else:
+                            print("❌ Opción inválida. Seleccione un número de la lista o 'N'.")
+                else:
+                    # No hay proyectos aún, pedir nombre
+                    while True:
+                        name_input = input("✍️ Ingrese el nombre de su nuevo proyecto: ").strip()
+                        if name_input:
+                            import re
+                            clean_name = re.sub(r'[^a-zA-Z0-9_-]', '-', name_input.lower())
+                            clean_name = re.sub(r'-+', '-', clean_name).strip('-')
+                            if clean_name:
+                                project_name = clean_name
+                                break
+                            else:
+                                print("❌ Nombre de proyecto inválido. Intente de nuevo.")
+                        else:
+                            print("❌ El nombre del proyecto no puede estar vacío.")
+                
+                print(f"\n🚀 Iniciando agencia para el proyecto: '{project_name}'")
+                print("═"*60 + "\n")
+            except (KeyboardInterrupt, EOFError):
+                print("\n❌ Operación cancelada por el usuario.")
+                sys.exit(0)
+
     runner = WorkflowRunner()
-    result = runner.run_workflow(args.workflow_id, args.project_name, user_request=args.request)
+    result = runner.run_workflow(args.workflow_id, project_name, user_request=args.request)
     print(json.dumps(result, indent=2))

@@ -47,6 +47,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Models Configuration
 GROQ_COMPLEX_MODEL = os.getenv("GROQ_COMPLEX_MODEL", "llama-3.3-70b-versatile")
 GROQ_SIMPLE_MODEL = os.getenv("GROQ_SIMPLE_MODEL", "llama-3.1-8b-instant")
+GEMINI_COMPLEX_MODEL = os.getenv("GEMINI_COMPLEX_MODEL", "gemini-2.5-pro")
+GEMINI_SIMPLE_MODEL = os.getenv("GEMINI_SIMPLE_MODEL", "gemini-2.0-flash")
 
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
