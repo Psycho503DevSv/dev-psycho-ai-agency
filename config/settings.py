@@ -47,8 +47,11 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Models Configuration
 GROQ_COMPLEX_MODEL = os.getenv("GROQ_COMPLEX_MODEL", "llama-3.3-70b-versatile")
 GROQ_SIMPLE_MODEL = os.getenv("GROQ_SIMPLE_MODEL", "llama-3.1-8b-instant")
-GEMINI_COMPLEX_MODEL = os.getenv("GEMINI_COMPLEX_MODEL", "gemini-2.5-pro")
-GEMINI_SIMPLE_MODEL = os.getenv("GEMINI_SIMPLE_MODEL", "gemini-2.0-flash")
+# Modelos verificados OK en test (2026-06-17):
+# OK: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-lite-latest, gemini-3.1-flash-lite, gemini-3.1-flash-lite-preview
+# FAIL 429: gemini-2.5-pro, gemini-2.0-flash, gemini-2.0-flash-lite
+GEMINI_COMPLEX_MODEL = os.getenv("GEMINI_COMPLEX_MODEL", "gemini-2.5-flash")
+GEMINI_SIMPLE_MODEL = os.getenv("GEMINI_SIMPLE_MODEL", "gemini-2.5-flash-lite")
 
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
