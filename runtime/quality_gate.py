@@ -30,7 +30,9 @@ class QualityGate:
             return None
         best_match = None
         max_matches = -1
-        for pt in self.project_types:
+        # Priorizar nextjs-monorepo colocándolo al principio de la lista de evaluación
+        ordered_types = sorted(self.project_types, key=lambda x: 0 if x.get("id") == "nextjs-monorepo" else 1)
+        for pt in ordered_types:
             req_files = pt.get("archivos_requeridos", [])
             if not req_files:
                 continue
@@ -189,11 +191,82 @@ class QualityGate:
             "score": 10.0 if approved else 2.0
         }
 
+    def validate_build(self) -> bool:
+        """Valida que el comando de build (si existe) se ejecute correctamente."""
+        pt = self.detect_project_type()
+        if not pt:
+            return True
+            
+        build_cmd = pt.get("herramienta_build")
+        if not build_cmd:
+            return True
+            
+        logger.info(f"Validando build del proyecto con comando: {build_cmd}")
+        
+        req_files = pt.get("archivos_requeridos", [])
+        build_cwd = self.project_path
+        
+        if "package.json" in req_files:
+            if not os.path.exists(os.path.join(self.project_path, "package.json")):
+                for root, _, files in os.walk(self.project_path):
+                    if "package.json" in files:
+                        build_cwd = root
+                        break
+                        
+        package_json_path = os.path.join(build_cwd, "package.json")
+        if os.path.exists(package_json_path):
+            try:
+                with open(package_json_path, "r", encoding="utf-8") as f:
+                    pj = json.load(f)
+                if "build" not in pj.get("scripts", {}):
+                    logger.info("package.json no tiene script de 'build'. Saltando validación de build.")
+                    return True
+            except Exception:
+                pass
+
+        import subprocess
+        if os.path.exists(package_json_path):
+            logger.info(f"Instalando dependencias (npm install) en {build_cwd}...")
+            try:
+                subprocess.run(
+                    "npm install",
+                    shell=True,
+                    cwd=build_cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=120
+                )
+            except Exception as e:
+                logger.warning(f"Advertencia en npm install: {e}")
+                
+        try:
+            res = subprocess.run(
+                build_cmd,
+                shell=True,
+                cwd=build_cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=120
+            )
+            if res.returncode != 0:
+                self.errors.append(
+                    f"BUILD_FAILED: El comando '{build_cmd}' falló en '{build_cwd}'. "
+                    f"stdout: {res.stdout[:500]}... stderr: {res.stderr[:500]}..."
+                )
+                return False
+            logger.info("Build del proyecto completado exitosamente.")
+            return True
+        except Exception as e:
+            self.errors.append(f"BUILD_ERROR: Fallo al ejecutar el build '{build_cmd}': {str(e)}")
+            return False
+
     def run(self) -> Dict:
         syntax = self.validate_syntax()
         structure = self.validate_structure()
+        build_ok = self.validate_build()
         
-        approved = (syntax and structure)
+        approved = (syntax and structure and build_ok)
         score = 10.0 if approved else max(2.0, 10.0 - (len(self.errors) * 2.0))
         
         reasons = []
@@ -202,14 +275,13 @@ class QualityGate:
             reasons = [f"Fallo de control de calidad: {err}" for err in self.errors]
             recommendations = [
                 "Corrija los errores de sintaxis indicados." if not syntax else "",
-                "Asegúrese de incluir README.md y requirements.txt en la raíz del proyecto." if not structure else ""
+                "Asegúrese de incluir README.md y requirements.txt en la raíz del proyecto o solucione el build." if not (structure and build_ok) else ""
             ]
             recommendations = [r for r in recommendations if r]
         else:
             reasons = ["Todos los chequeos de calidad pasaron exitosamente."]
             recommendations = ["El proyecto mantiene los estándares de robustez 10/10."]
 
-        # Validar la decisión usando Pydantic
         decision = GateDecisionSchema(
             approved=approved,
             score=score,
@@ -217,13 +289,13 @@ class QualityGate:
             recommendations=recommendations
         )
 
-        # Retornamos el diccionario dict-compatible e incluimos logs/checks para retrocompatibilidad
         res = decision.model_dump()
         res["status"] = "SUCCESS" if approved else "FAIL"
         res["errors"] = self.errors
         res["checks"] = {
             "syntax": "OK" if syntax else "FAIL",
-            "structure": "OK" if structure else "FAIL"
+            "structure": "OK" if structure else "FAIL",
+            "build": "OK" if build_ok else "FAIL"
         }
         return res
 

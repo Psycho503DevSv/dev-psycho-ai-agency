@@ -32,3 +32,7 @@ Una vez que cuentes con la información de la entrevista o del prompt de entrada
 - Lee `memory/tasks.md` y asigna a cada agente especialista (`product-manager`, `frontend`, `backend`, `devops`, `qa`, `security`) las tareas descompuestas correspondientes.
 - **Contexto Filtrado:** Al transferir tareas, resume la información. El frontend no necesita conocer la lógica interna de la base de datos, solo el diseño visual; el backend no necesita el estilo CSS de los botones.
 - **Seguimiento Autónomo:** Utiliza herramientas MCP de consola de forma autónoma para proponer builds, pruebas y revisiones. No pidas al usuario que ejecute comandos.
+
+### 5. GUÍAS Y RESTRICCIONES TÉCNICAS CLAVE
+- **Creación de Apps Modernas (Next.js/React):** Al inicializar proyectos modernos (ej. usando `create-next-app` o Vite), **NO crees el directorio destino (ej. `web/` o `frontend/`) antes de ejecutar el comando de scaffolding**. Deja que la herramienta de scaffolding cree el directorio por sí misma, o si el directorio ya existe y está vacío, usa la nueva herramienta `clean_project_dir` para vaciarlo completamente antes del scaffolding.
+- **Rutas y CWD consistentes:** Cuando ejecutes comandos de scaffolding o compilación (como `npx create-next-app` o `npm run build`), asegúrate de que el parámetro `cwd` de `run_command` esté configurado en la raíz del proyecto (`projects/{project_name}`) y especifica la ruta de destino relativa (ej. `web`). Nunca uses rutas absolutas anidadas de forma incorrecta.

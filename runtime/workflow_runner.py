@@ -553,6 +553,7 @@ Herramientas disponibles (SOLO estas, NO inventes otras):
 - `read_file`: {{"path": "memory/projects/{project_name}/requirements.md"}}
 - `write_file`: {{"path": "memory/projects/{project_name}/requirements.md", "content": "# Requisitos del Proyecto\\n\\n..."}}
 - `list_dir`: {{"path": "projects/{project_name}"}}
+- `clean_project_dir`: {{"path": "projects/{project_name}/web"}}
 - `search_code`: {{"query": "const database"}}
 - `run_command`: {{"command": "npm run build", "cwd": "projects/{project_name}"}}
 - `preview_project`: {{"project_type": "web-framework", "project_path": "projects/{project_name}"}}

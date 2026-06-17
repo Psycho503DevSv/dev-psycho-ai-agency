@@ -146,3 +146,59 @@ def test_dashboard_persistence(temp_project):
         assert data["state"]["project_name"] == "test-persist"
     finally:
         db.STATE_FILE_PATH = original_path
+
+
+def test_mcp_executor_clean_project_dir(temp_project):
+    executor = McpExecutor(base_dir=temp_project)
+    executor.active_project_name = "test-project"
+    
+    # Create project dirs
+    project_dir = os.path.join(temp_project, "projects", "test-project")
+    sub_dir = os.path.join(project_dir, "web")
+    os.makedirs(sub_dir, exist_ok=True)
+    
+    # Create some mock files
+    file1 = os.path.join(sub_dir, "index.js")
+    with open(file1, "w") as f:
+        f.write("console.log('hello')")
+        
+    # Verify files exist
+    assert os.path.exists(file1)
+    
+    # Try cleaning the subdirectory
+    res = executor.execute_tool("clean_project_dir", {"path": "projects/test-project/web"}, agent_role="frontend-developer")
+    assert res["status"] == "SUCCESS"
+    assert "clean_project_dir" in res or "message" in res
+    
+    # Subdirectory contents should be empty, but subdirectory itself still exists
+    assert os.path.exists(sub_dir)
+    assert len(os.listdir(sub_dir)) == 0
+
+    # Deny cleaning outside sandbox
+    res_outside = executor.execute_tool("clean_project_dir", {"path": "projects/other-project"}, agent_role="frontend-developer")
+    assert res_outside["status"] == "FAIL"
+
+    # Deny cleaning project root itself
+    res_root = executor.execute_tool("clean_project_dir", {"path": "projects/test-project"}, agent_role="frontend-developer")
+    assert res_root["status"] == "FAIL"
+
+
+def test_mcp_executor_mkdir_multi_path(temp_project):
+    executor = McpExecutor(base_dir=temp_project)
+    
+    # Run a mkdir -p with multiple paths
+    command = "mkdir -p projects/test-project/web projects/test-project/admin-app"
+    res = executor._try_native_command(command, temp_project)
+    
+    assert res is not None
+    assert res["status"] == "SUCCESS"
+    
+    # Check that both directories were created as separate directories (no space in the name)
+    web_dir = os.path.join(temp_project, "projects", "test-project", "web")
+    admin_dir = os.path.join(temp_project, "projects", "test-project", "admin-app")
+    space_dir = os.path.join(temp_project, "projects", "test-project", "web projects")
+    
+    assert os.path.exists(web_dir)
+    assert os.path.exists(admin_dir)
+    assert not os.path.exists(space_dir)
+

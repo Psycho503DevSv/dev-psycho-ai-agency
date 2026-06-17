@@ -268,6 +268,49 @@ class McpExecutor:
             })
         return {"status": "SUCCESS", "items": items}
 
+    def _tool_clean_project_dir(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Limpia de forma segura el contenido de un directorio dentro del sandbox del proyecto activo."""
+        path_arg = args.get("path", "")
+        if not path_arg:
+            return {"status": "FAIL", "error": "El argumento 'path' es obligatorio."}
+            
+        try:
+            resolved_path = self._resolve_path(path_arg)
+        except PermissionError as pe:
+            return {"status": "FAIL", "error": str(pe)}
+            
+        if not self.active_project_name:
+            return {"status": "FAIL", "error": "No hay ningún proyecto activo seleccionado."}
+            
+        project_sandbox = os.path.abspath(os.path.join(self.base_dir, "projects", self.active_project_name))
+        
+        if not resolved_path.startswith(project_sandbox):
+            return {"status": "FAIL", "error": f"Acceso denegado: El path debe estar dentro de la carpeta del proyecto activo ({project_sandbox})"}
+            
+        if resolved_path == project_sandbox:
+            return {"status": "FAIL", "error": f"Acceso denegado: No se permite limpiar la raíz completa del proyecto ({project_sandbox})"}
+            
+        if not os.path.exists(resolved_path):
+            return {"status": "SUCCESS", "message": f"El directorio no existe, ya está limpio: {path_arg}"}
+            
+        try:
+            import shutil
+            if os.path.isdir(resolved_path):
+                for item in os.listdir(resolved_path):
+                    item_path = os.path.join(resolved_path, item)
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                    else:
+                        os.remove(item_path)
+                logger.info(f"[Sandbox] Limpieza exitosa en directorio: {resolved_path}")
+                return {"status": "SUCCESS", "message": f"Contenido del directorio limpio exitosamente: {path_arg}"}
+            else:
+                os.remove(resolved_path)
+                logger.info(f"[Sandbox] Archivo eliminado: {resolved_path}")
+                return {"status": "SUCCESS", "message": f"Archivo eliminado: {path_arg}"}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Error limpiando directorio: {str(e)}"}
+
     # --- Herramientas de Comandos / Terminal ---
 
     # ── Guardrails compartidos ────────────────────────────────────────────────
@@ -396,16 +439,25 @@ class McpExecutor:
 
         cmd = command.strip()
 
-        # mkdir -p <path> → os.makedirs
+        # mkdir -p <path> → os.makedirs (soporta múltiples rutas)
         if re.match(r'^mkdir\s+-p\s+', cmd) or re.match(r'^mkdir\s+', cmd):
-            parts = cmd.split(None, 2)
-            path_arg = parts[-1].strip().strip('"').strip("'")
-            if not os.path.isabs(path_arg):
-                path_arg = os.path.join(cwd, path_arg)
+            tokens = cmd.split()
+            paths = []
+            for token in tokens[1:]:
+                if token == "-p" or token.startswith("-"):
+                    continue
+                paths.append(token.strip().strip('"').strip("'"))
+            if not paths:
+                return {"status": "FAIL", "stdout": "", "stderr": "mkdir: missing operand", "code": 1}
             try:
-                os.makedirs(path_arg, exist_ok=True)
-                logger.info(f"[NativeCmd] mkdir nativo: {path_arg}")
-                return {"status": "SUCCESS", "stdout": f"Directorio creado: {path_arg}", "stderr": "", "code": 0}
+                stdout_msgs = []
+                for path_arg in paths:
+                    if not os.path.isabs(path_arg):
+                        path_arg = os.path.join(cwd, path_arg)
+                    os.makedirs(path_arg, exist_ok=True)
+                    stdout_msgs.append(f"Directorio creado: {path_arg}")
+                logger.info(f"[NativeCmd] mkdir nativo: {', '.join(paths)}")
+                return {"status": "SUCCESS", "stdout": "\n".join(stdout_msgs), "stderr": "", "code": 0}
             except Exception as e:
                 return {"status": "FAIL", "stdout": "", "stderr": str(e), "code": 1}
 
