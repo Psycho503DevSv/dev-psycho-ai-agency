@@ -199,3 +199,12 @@ def get_rotation_status() -> dict:
             "last_rotation_date": pstate.get("last_rotation_date", ""),
         }
     return summary
+
+
+def get_valid_keys(provider: str, all_keys: List[str]) -> List[str]:
+    """Retorna la lista de keys filtrando las marcadas en permanently_invalid."""
+    state = _load_state()
+    provider_state = state.get(provider, {})
+    permanently_invalid_indices = provider_state.get("permanently_invalid", [])
+    return [key for idx, key in enumerate(all_keys) if idx not in permanently_invalid_indices]
+

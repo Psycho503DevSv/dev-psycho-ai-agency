@@ -58,6 +58,17 @@
       "archivos_requeridos": ["index.html"],
       "librerias_recomendadas": ["gsap", "three.js", "anime.js", "lottie-web"],
       "agentes_principales": ["frontend"]
+    },
+    {
+      "id": "nextjs-monorepo",
+      "nombre": "Next.js Monorepo (web/ subcarpeta)",
+      "descripcion": "Proyectos Next.js organizados en una subcarpeta (ej: web/ o frontend/) dentro del repositorio. Requiere package.json y configuración básica.",
+      "herramienta_build": "npm run build",
+      "herramienta_dev": "npm run dev",
+      "herramienta_preview": "open_browser",
+      "puerto_default": 3000,
+      "archivos_requeridos": ["package.json"],
+      "agentes_principales": ["frontend", "backend"]
     }
   ]
 }

@@ -135,10 +135,10 @@ class WorkflowRunner:
         """
         import time
         try:
-            from runtime.key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error, is_permanent_error
+            from runtime.key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error, is_permanent_error, get_valid_keys
         except ImportError:
             sys.path.append(os.path.dirname(__file__))
-            from key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error, is_permanent_error
+            from key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error, is_permanent_error, get_valid_keys
 
         openai_key = getattr(settings, "OPENAI_API_KEY", "")
         anthropic_key = getattr(settings, "ANTHROPIC_API_KEY", "")
@@ -149,6 +149,10 @@ class WorkflowRunner:
 
         gemini_keys = parse_keys(gemini_raw)
         groq_keys = parse_keys(groq_raw)
+
+        # Excluir keys permanentemente inválidas al crear slots
+        gemini_keys = get_valid_keys("gemini", gemini_keys)
+        groq_keys = get_valid_keys("groq", groq_keys)
 
         is_complex_agent = agent_id in ["psycho-ceo", "product-manager", "ai-architect"]
 
@@ -171,15 +175,14 @@ class WorkflowRunner:
                     "all_keys": gemini_keys,
                 })
 
-        # ── Groq (multi-key con rotador) ──
+        # ── Groq (un slot por cada key del pool - simétrico a Gemini) ──
         if groq_keys:
             groq_model = getattr(settings, "GROQ_COMPLEX_MODEL", "llama-3.3-70b-versatile") if is_complex_agent else getattr(settings, "GROQ_SIMPLE_MODEL", "llama-3.1-8b-instant")
-            active_key = get_active_key("groq", groq_keys)
-            if active_key:
+            for idx, key in enumerate(groq_keys):
                 provider_slots.append({
-                    "name": f"Groq[{groq_keys.index(active_key)}]",
+                    "name": f"Groq[{idx}]",
                     "url": "https://api.groq.com/openai/v1/chat/completions",
-                    "key": active_key,
+                    "key": key,
                     "model": groq_model,
                     "is_anthropic": False,
                     "pool_name": "groq",
@@ -285,10 +288,10 @@ class WorkflowRunner:
                 if system_text:
                     payload["system"] = system_text.strip()
             elif provider.get("pool_name") == "gemini":
-                # P0 Fix: Usar x-goog-api-key (no Authorization: Bearer) para la API de Gemini.
-                # Authorization: Bearer causa 403 Forbidden en keys AQ.* de Google AI Studio.
+                # P0 Fix: Usar Authorization: Bearer {key} porque el endpoint compatible con OpenAI
+                # de Gemini (v1beta/openai) lo exige. El 403 anterior fue por una key inválida.
                 headers = {
-                    "x-goog-api-key": provider["key"],
+                    "Authorization": f"Bearer {provider['key']}",
                     "Content-Type": "application/json",
                 }
                 payload = {
@@ -461,6 +464,13 @@ class WorkflowRunner:
             if success:
                 break  # Salida limpia del bucle principal
 
+            # Si falló la key, asegurar que esté en tried_keys para no volver a intentar
+            if pool_name:
+                if pool_name not in tried_keys:
+                    tried_keys[pool_name] = []
+                if provider["key"] not in tried_keys[pool_name]:
+                    tried_keys[pool_name].append(provider["key"])
+
             # Si el pool tiene más keys sin intentar, NO avanzar el índice de slot
             if pool_name:
                 remaining = [k for k in all_keys if k not in tried_keys.get(pool_name, [])]
@@ -560,6 +570,13 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
 3. Con la respuesta del usuario, genera un borrador inicial del archivo de requisitos.
 4. Si tienes dudas adicionales sobre el diseño, animaciones, logo o integraciones, usa `ask_user` para aclararlas una por una, construyendo sobre la base y preservando el borrador.
 5. Cuando todo esté definido y aclarado con el usuario, escribe el archivo final en 'memory/projects/{project_name}/requirements.md' e incluye de manera obligatoria y visible la frase "Entrevista validada" dentro de los requisitos para autorizar las siguientes fases."""
+
+        if workflow_id in ("wf-implementation", "wf-build-project"):
+            system_instruction += f"""
+
+=== REQUISITO OBLIGATORIO DE ENTREGA ===
+Es obligatorio que crees o actualices un archivo 'README.md' en la raíz del proyecto ('projects/{project_name}/README.md').
+En este README.md debes describir de forma clara el propósito del proyecto, su arquitectura, y las instrucciones para instalarlo y ejecutarlo. El control de calidad (Quality Gate) final fallará automáticamente si este archivo no está presente en la raíz."""
 
         user_content = f"Por favor, ejecuta las tareas correspondientes para el paso actual de '{workflow_id}' del proyecto '{project_name}'."
         if user_request:

@@ -34,7 +34,23 @@ class QualityGate:
             req_files = pt.get("archivos_requeridos", [])
             if not req_files:
                 continue
-            matches = sum(1 for f in req_files if os.path.exists(os.path.join(self.project_path, f)))
+            
+            # Buscar cada archivo requerido en el proyecto (incluso en subcarpetas)
+            matches = 0
+            for rf in req_files:
+                # Si existe directamente en la raíz
+                if os.path.exists(os.path.join(self.project_path, rf)):
+                    matches += 1
+                else:
+                    # Buscar de forma recursiva
+                    found = False
+                    for root, _, files in os.walk(self.project_path):
+                        if rf in files:
+                            found = True
+                            break
+                    if found:
+                        matches += 1
+                        
             if matches > 0 and matches > max_matches:
                 max_matches = matches
                 best_match = pt
@@ -69,9 +85,23 @@ class QualityGate:
             logger.info(f"Tipo de proyecto detectado para validación: {pt.get('nombre')} ({pt.get('id')})")
             
         for rf in required_files:
-            if not os.path.exists(os.path.join(self.project_path, rf)):
-                self.errors.append(f"MISSING_FILE: {rf}")
-                passed = False
+            # README.md siempre debe estar estrictamente en la raíz del proyecto
+            if rf == "README.md":
+                if not os.path.exists(os.path.join(self.project_path, rf)):
+                    self.errors.append(f"MISSING_FILE: {rf}")
+                    passed = False
+            else:
+                # Otros archivos pueden estar en subcarpetas (ej. package.json en web/)
+                if os.path.exists(os.path.join(self.project_path, rf)):
+                    continue
+                found = False
+                for root, _, files in os.walk(self.project_path):
+                    if rf in files:
+                        found = True
+                        break
+                if not found:
+                    self.errors.append(f"MISSING_FILE: {rf}")
+                    passed = False
         return passed
 
     @staticmethod
