@@ -7,7 +7,7 @@ from runtime.logger import logger
 
 
 class AgentLoader:
-    def __init__(self, base_path: str = None, registry_path: str = None):
+    def __init__(self, base_path: Optional[str] = None, registry_path: Optional[str] = None):
         self.base_path = base_path or settings.AGENTS_DIR
         self.registry_path = registry_path or settings.AGENT_REGISTRY
         self.agents: Dict[str, dict] = {}
