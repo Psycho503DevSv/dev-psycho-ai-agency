@@ -9,6 +9,9 @@ from runtime.logger import logger
 
 PORT = 8050
 
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATE_FILE_PATH = os.path.join(base_dir, "memory", "dashboard_state.json")
+
 # Variables globales para almacenar el estado y logs de eventos
 _state = {
     "status": "IDLE",
@@ -24,7 +27,8 @@ _state = {
     "all_steps": [],
     "completed_steps": [],
     "pending_question": None,
-    "document_preview": None
+    "document_preview": None,
+    "web_response": None
 }
 
 _logs = []
@@ -35,6 +39,41 @@ _lock = threading.Lock()
 
 _question_event = threading.Event()
 _web_response = None
+
+def _save_state_to_disk():
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE_PATH), exist_ok=True)
+        state_data = {
+            "state": _state,
+            "logs": _logs,
+            "security_alerts": _security_alerts
+        }
+        with open(STATE_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"Error al guardar estado del dashboard en disco: {e}")
+
+def _load_state_from_disk():
+    global _state, _logs, _security_alerts
+    if os.path.exists(STATE_FILE_PATH):
+        try:
+            with open(STATE_FILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                disk_state = data.get("state", {})
+                disk_logs = data.get("logs", [])
+                disk_alerts = data.get("security_alerts", [])
+                
+                for k, v in disk_state.items():
+                    _state[k] = v
+                
+                _logs.clear()
+                _logs.extend(disk_logs)
+                
+                _security_alerts.clear()
+                _security_alerts.extend(disk_alerts)
+        except Exception as e:
+            logger.warning(f"Error al cargar estado del dashboard desde disco: {e}")
 
 import re
 
@@ -63,6 +102,7 @@ def redact_secrets(data):
 def update_dashboard_state(update_dict: dict):
     update_dict = redact_secrets(update_dict)
     with _lock:
+        _load_state_from_disk()
         for k, v in update_dict.items():
             if k in _state:
                 if k == "recent_tool_calls":
@@ -70,44 +110,84 @@ def update_dashboard_state(update_dict: dict):
                     _state[k] = _state[k][:10]  # Limitar a las últimas 10
                 else:
                     _state[k] = v
+        _save_state_to_disk()
 
 def add_dashboard_log(log_line: str):
     log_line = redact_secrets(log_line)
     with _lock:
+        _load_state_from_disk()
         _logs.append(log_line)
         if len(_logs) > 50:
             _logs.pop(0)
+        _save_state_to_disk()
 
 def add_security_alert(alert_line: str):
     with _lock:
+        _load_state_from_disk()
         _security_alerts.append(alert_line)
         if len(_security_alerts) > 20:
             _security_alerts.pop(0)
+        _save_state_to_disk()
 
 def set_pending_question(question: str, document_preview: Optional[str] = None):
     global _web_response
     with _lock:
+        _load_state_from_disk()
         _state["pending_question"] = question
         _state["document_preview"] = document_preview
+        _state["web_response"] = None
+        _save_state_to_disk()
         _web_response = None
         _question_event.clear()
 
 def clear_pending_question():
     with _lock:
+        _load_state_from_disk()
         _state["pending_question"] = None
         _state["document_preview"] = None
+        _state["web_response"] = None
+        _save_state_to_disk()
 
 def submit_web_response(response: str):
     global _web_response
     with _lock:
+        _load_state_from_disk()
+        _state["web_response"] = response
+        _state["pending_question"] = None
+        _save_state_to_disk()
         _web_response = response
         _question_event.set()
 
 def get_web_response():
-    return _web_response
+    global _web_response
+    if _web_response is not None:
+        return _web_response
+    try:
+        if os.path.exists(STATE_FILE_PATH):
+            with open(STATE_FILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("state", {}).get("web_response")
+    except Exception:
+        pass
+    return None
 
 def wait_for_response(timeout=None):
-    return _question_event.wait(timeout)
+    if timeout is None:
+        timeout = 300
+    import time
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if _question_event.wait(0.5):
+            return True
+        try:
+            if os.path.exists(STATE_FILE_PATH):
+                with open(STATE_FILE_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("state", {}).get("web_response") is not None:
+                    return True
+        except Exception:
+            pass
+    return False
 
 
 class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):

@@ -140,11 +140,21 @@ class McpExecutor:
                     pass
         except Exception as e:
             logger.error(f"Error escribiendo en security_audit.log: {str(e)}")
-
     # --- Herramientas del Filesystem ---
 
     def _tool_read_file(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        path = self._resolve_path(args.get("path", ""))
+        path_arg = args.get("path", "")
+        if self.active_project_name:
+            norm_path = path_arg.replace("\\", "/").lower()
+            if "memory/" in norm_path and f"memory/projects/{self.active_project_name.lower()}" not in norm_path:
+                filename = os.path.basename(path_arg).lower()
+                is_global = filename in ["lessons_learned.md", "token_usage.json", "security_audit.log"]
+                if not is_global:
+                    return {
+                        "status": "FAIL",
+                        "error": f"Acceso Denegado: Intentaste leer de la ruta global '{path_arg}'. Cuando hay un proyecto activo aislado, debes leer de la ruta específica del proyecto: 'memory/projects/{self.active_project_name}/{os.path.basename(path_arg)}'."
+                    }
+        path = self._resolve_path(path_arg)
         if not os.path.exists(path):
             return {"status": "FAIL", "error": f"Archivo no encontrado: {path}"}
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -152,9 +162,19 @@ class McpExecutor:
         return {"status": "SUCCESS", "content": content}
 
     def _tool_write_file(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        path = self._resolve_path(args.get("path", ""))
+        path_arg = args.get("path", "")
+        if self.active_project_name:
+            norm_path = path_arg.replace("\\", "/").lower()
+            if "memory/" in norm_path and f"memory/projects/{self.active_project_name.lower()}" not in norm_path:
+                filename = os.path.basename(path_arg).lower()
+                is_global = filename in ["lessons_learned.md", "token_usage.json", "security_audit.log"]
+                if not is_global:
+                    return {
+                        "status": "FAIL",
+                        "error": f"Acceso Denegado: Intentaste escribir en la ruta global '{path_arg}'. Cuando hay un proyecto activo aislado, debes usar la ruta específica del proyecto: 'memory/projects/{self.active_project_name}/{os.path.basename(path_arg)}'."
+                    }
+        path = self._resolve_path(path_arg)
         content = args.get("content", "")
-        
         filename = os.path.basename(path).lower()
         forbidden_extensions = {".pem", ".key", ".pub", ".cer", ".crt", ".der", ".pfx", ".p12"}
         forbidden_files = {".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "authorized_keys"}

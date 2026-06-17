@@ -93,6 +93,36 @@ class QualityGate:
                         errors.append(f"El archivo {req_path} tiene longitud insuficiente ({len(content)}/500 caracteres).")
                     if "Entrevista validada" not in content:
                         errors.append(f"El archivo {req_path} no contiene la firma obligatoria 'Entrevista validada' del CEO.")
+                    
+                    # 1. Validar coherencia slug <-> título del documento
+                    first_header = ""
+                    for line in content.splitlines():
+                        if line.strip().startswith("# "):
+                            first_header = line.strip()[2:].strip().lower()
+                            break
+                    slug = os.path.basename(project_memory_dir)
+                    slug_words = [w for w in slug.split("-") if len(w) > 2]
+                    if first_header:
+                        has_matching_word = any(word in first_header for word in slug_words)
+                        if not has_matching_word:
+                            errors.append(f"El título del documento de requisitos ('{first_header}') no hace referencia al slug del proyecto ('{slug}').")
+                    else:
+                        errors.append("El documento de requisitos debe comenzar con un título principal (ej: '# Proyecto Nuevo 2026').")
+                        
+                    # 2. Prohibir nombres de negocio/slugs de otros proyectos para evitar contaminación
+                    parent_dir = os.path.dirname(project_memory_dir)
+                    if os.path.exists(parent_dir):
+                        other_slugs = [d for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d)) and d != slug]
+                        for other in other_slugs:
+                            keywords = [other, other.replace("-", " "), other.replace("-", "")]
+                            parts = other.split("-")
+                            if len(parts) > 1 and len(parts[0]) > 3:
+                                keywords.append(parts[0])
+                            
+                            for kw in keywords:
+                                if len(kw) > 3 and kw.lower() in content.lower():
+                                    errors.append(f"Se detectó contaminación de contexto del proyecto '{other}' (término encontrado: '{kw}') en los requisitos.")
+                                    break
                 except Exception as e:
                     errors.append(f"Error leyendo {req_path}: {str(e)}")
         elif workflow_id == "wf-planning":

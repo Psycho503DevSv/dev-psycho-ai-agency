@@ -175,7 +175,7 @@ class WorkflowRunner:
 
         # ── Groq (multi-key con rotador) ──
         if groq_keys:
-            groq_model = "llama-3.1-70b-versatile" if is_complex_agent else "llama-3.1-8b-instant"
+            groq_model = getattr(settings, "GROQ_COMPLEX_MODEL", "llama-3.3-70b-versatile") if is_complex_agent else getattr(settings, "GROQ_SIMPLE_MODEL", "llama-3.1-8b-instant")
             active_key = get_active_key("groq", groq_keys)
             if active_key:
                 provider_slots.append({
@@ -764,7 +764,7 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
                 return {"status": "FAIL", "error": error_msg, "completed_steps": steps_execution}
             
             try:
-                context = self.agent_loader.get_agent_context(agent_id, project_name)
+                context = self.agent_loader.get_agent_context(agent_id, project_name, workflow_id)
                 if not context:
                     error_msg = f"No se pudo cargar el contexto para el agente {agent_id}"
                     logger.error(error_msg)
@@ -898,12 +898,16 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
         except Exception as le:
             logger.warning(f"No se pudo ejecutar el autoaprendizaje al final del workflow: {str(le)}")
 
+        if self.status == "RUNNING":
+            self.status = "SUCCESS"
+
         # Marcar workflow como completado en el dashboard
         try:
             update_dashboard_state({
-                "status": "COMPLETED" if self.status == "RUNNING" else "FAILED",
+                "status": "COMPLETED" if self.status == "SUCCESS" else "FAILED",
                 "active_agent": "Ninguno",
-                "active_role": "Ninguno"
+                "active_role": "Ninguno",
+                "next_action": "Siguiente fase: Planificación (wf-planning)" if (workflow_id == "wf-discovery" and self.status == "SUCCESS") else "Listo"
             })
             add_dashboard_log(f"Workflow finalizado con estado: {self.status}")
         except Exception:
@@ -941,8 +945,17 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
             "output_expected": wf.get("output_file").format(project_name=project_name) if wf.get("output_file") else None
         }
         
-        self.status = "SUCCESS"
         logger.info(f"STATUS CHANGE: {self.status} - Workflow {workflow_id} finalizado exitosamente.")
+
+        # Auto-handoff discovery -> planning
+        if workflow_id == "wf-discovery" and self.status == "SUCCESS":
+            logger.info("Discovery finalizado con éxito. Lanzando automáticamente la fase de Planificación (wf-planning)...")
+            try:
+                add_dashboard_log("Discovery finalizado con éxito. Lanzando automáticamente la fase de Planificación (wf-planning)...")
+            except Exception:
+                pass
+            return self.run_workflow("wf-planning", project_name, user_request)
+
         return report
 
 if __name__ == "__main__":
