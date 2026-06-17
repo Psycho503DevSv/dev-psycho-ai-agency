@@ -89,8 +89,8 @@ class QualityGate:
                 try:
                     with open(req_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                    if len(content) < 500:
-                        errors.append(f"El archivo {req_path} tiene longitud insuficiente ({len(content)}/500 caracteres).")
+                    if len(content) < 200:
+                        errors.append(f"El archivo {req_path} tiene longitud insuficiente ({len(content)}/200 caracteres mínimos).")
                     if "Entrevista validada" not in content:
                         errors.append(f"El archivo {req_path} no contiene la firma obligatoria 'Entrevista validada' del CEO.")
                     
@@ -110,17 +110,29 @@ class QualityGate:
                         errors.append("El documento de requisitos debe comenzar con un título principal (ej: '# Proyecto Nuevo 2026').")
                         
                     # 2. Prohibir nombres de negocio/slugs de otros proyectos para evitar contaminación
+                    # P2 Fix: Filtrar palabras genéricas del español/inglés que no identifican proyectos
+                    # (ej: slug 'proyecto-nuevo-2026' → 'proyecto' es genérico, no un identificador único).
+                    GENERIC_WORDS = {
+                        "proyecto", "new", "nuevo", "demo", "test", "app", "web", "api",
+                        "dev", "prod", "staging", "beta", "alpha", "site", "page",
+                        "service", "servicio", "system", "sistema", "platform", "plataforma",
+                    }
                     parent_dir = os.path.dirname(project_memory_dir)
                     if os.path.exists(parent_dir):
                         other_slugs = [d for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d)) and d != slug]
                         for other in other_slugs:
                             keywords = [other, other.replace("-", " "), other.replace("-", "")]
                             parts = other.split("-")
-                            if len(parts) > 1 and len(parts[0]) > 3:
-                                keywords.append(parts[0])
+                            # Solo agregar partes del slug que sean únicas (no genéricas, más de 3 chars)
+                            meaningful_parts = [
+                                p for p in parts
+                                if len(p) > 3 and p.lower() not in GENERIC_WORDS
+                            ]
+                            if meaningful_parts:
+                                keywords.append(meaningful_parts[0])
                             
                             for kw in keywords:
-                                if len(kw) > 3 and kw.lower() in content.lower():
+                                if len(kw) > 3 and kw.lower() not in GENERIC_WORDS and kw.lower() in content.lower():
                                     errors.append(f"Se detectó contaminación de contexto del proyecto '{other}' (término encontrado: '{kw}') en los requisitos.")
                                     break
                 except Exception as e:

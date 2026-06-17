@@ -62,9 +62,10 @@ def get_active_key(provider: str, all_keys: List[str]) -> Optional[str]:
     Lógica:
     - Carga el estado guardado.
     - Si el día cambió, avanza al siguiente índice base (rotación diaria).
-    - Excluye keys marcadas como agotadas en la sesión actual.
+    - Excluye keys permanentemente inválidas (403) — nunca se resetean.
+    - Excluye keys agotadas por cuota (429/503) en la sesión actual.
     - Retorna la primera key válida del pool (circular).
-    - Si todas están agotadas, las resetea y vuelve al inicio.
+    - Si todas las no-permanentes están agotadas, resetea solo las de cuota.
     """
     if not all_keys:
         return None
@@ -81,43 +82,54 @@ def get_active_key(provider: str, all_keys: List[str]) -> Optional[str]:
         base_index = (base_index + 1) % len(all_keys)
         provider_state["last_rotation_date"] = today
         provider_state["base_index"] = base_index
-        provider_state["exhausted_today"] = []  # resetear agotadas al nuevo día
+        provider_state["exhausted_today"] = []  # resetear solo cuota-agotadas; las permanentes persisten
         logger.info(f"[KeyRotator] {provider}: Rotación diaria → key #{base_index}")
 
-    # ── Excluir keys agotadas en la sesión ──
+    # ── Excluir keys agotadas (cuota) y permanentemente inválidas (403) ──
     exhausted: List[int] = provider_state.get("exhausted_today", [])
+    permanently_invalid: List[int] = provider_state.get("permanently_invalid", [])
+    blocked = set(exhausted) | set(permanently_invalid)
 
-    # Si todas están agotadas, resetear para no bloquear la ejecución
-    if len(exhausted) >= len(all_keys):
-        logger.warning(f"[KeyRotator] {provider}: Todas las keys agotadas. Reseteando pool.")
+    # Si todas las keys no-permanentes están agotadas, resetear solo las de cuota
+    non_permanent = [i for i in range(len(all_keys)) if i not in permanently_invalid]
+    if non_permanent and all(i in blocked for i in non_permanent):
+        logger.warning(f"[KeyRotator] {provider}: Keys de cuota agotadas. Reseteando pool (keys inválidas permanentes excluidas).")
         exhausted = []
         provider_state["exhausted_today"] = []
+        blocked = set(permanently_invalid)
+    elif not non_permanent:
+        # Todas las keys son permanentemente inválidas
+        logger.error(f"[KeyRotator] {provider}: TODAS las keys son permanentemente inválidas (403). Proveedor no disponible.")
+        return None
 
     # Buscar la primera key válida empezando desde base_index (circular)
     selected_index = None
     for offset in range(len(all_keys)):
         candidate = (base_index + offset) % len(all_keys)
-        if candidate not in exhausted:
+        if candidate not in blocked:
             selected_index = candidate
             break
 
     if selected_index is None:
-        # Fallback: usar la primera
-        selected_index = 0
+        # Fallback: usar la primera no-permanente
+        selected_index = non_permanent[0] if non_permanent else 0
 
     provider_state["current_index"] = selected_index
     state[provider] = provider_state
     _save_state(state)
 
     selected_key = all_keys[selected_index]
-    logger.debug(f"[KeyRotator] {provider}: Usando key #{selected_index} (pool de {len(all_keys)})")
+    logger.debug(f"[KeyRotator] {provider}: Usando key #{selected_index} (pool de {len(all_keys)}, {len(permanently_invalid)} inválidas permanentes)")
     return selected_key
 
 
-def mark_key_exhausted(provider: str, all_keys: List[str], failed_key: str) -> None:
+def mark_key_exhausted(provider: str, all_keys: List[str], failed_key: str, permanent: bool = False) -> None:
     """
-    Marca una key como agotada para la sesión actual (por 429, timeout, o error de cuota).
-    La próxima llamada a get_active_key() saltará esta key.
+    Marca una key como agotada para la sesión actual (429/timeout) o permanentemente inválida (403).
+
+    Args:
+        permanent: Si True, la key se añade a `permanently_invalid` y NUNCA se resetea
+                   aunque el pool diario se reinicie. Usar para errores 403.
     """
     if not all_keys or failed_key not in all_keys:
         return
@@ -125,21 +137,35 @@ def mark_key_exhausted(provider: str, all_keys: List[str], failed_key: str) -> N
     failed_index = all_keys.index(failed_key)
     state = _load_state()
     provider_state = state.get(provider, {})
-    exhausted: List[int] = provider_state.get("exhausted_today", [])
 
-    if failed_index not in exhausted:
-        exhausted.append(failed_index)
-        provider_state["exhausted_today"] = exhausted
-        state[provider] = provider_state
-        _save_state(state)
-        logger.warning(
-            f"[KeyRotator] {provider}: Key #{failed_index} marcada como agotada "
-            f"({len(exhausted)}/{len(all_keys)} agotadas)"
-        )
+    if permanent:
+        # Key permanentemente inválida (403 Forbidden) — no vuelve al pool nunca
+        permanently_invalid: List[int] = provider_state.get("permanently_invalid", [])
+        if failed_index not in permanently_invalid:
+            permanently_invalid.append(failed_index)
+            provider_state["permanently_invalid"] = permanently_invalid
+            state[provider] = provider_state
+            _save_state(state)
+            logger.error(
+                f"[KeyRotator] {provider}: Key #{failed_index} marcada como PERMANENTEMENTE INVÁLIDA (403) "
+                f"— excluida del pool para siempre en esta instalación."
+            )
+    else:
+        # Key agotada por cuota (429/503/timeout) — se resetea al día siguiente
+        exhausted: List[int] = provider_state.get("exhausted_today", [])
+        if failed_index not in exhausted:
+            exhausted.append(failed_index)
+            provider_state["exhausted_today"] = exhausted
+            state[provider] = provider_state
+            _save_state(state)
+            logger.warning(
+                f"[KeyRotator] {provider}: Key #{failed_index} marcada como agotada (cuota) "
+                f"({len(exhausted)}/{len(all_keys)} agotadas hoy)"
+            )
 
 
 def is_quota_error(status_code: int, error_text: str) -> bool:
-    """Detecta si el error es un problema de cuota/rate-limit que justifica rotar la key."""
+    """Detecta si el error es de cuota/rate-limit (429/503) — justifica rotar key temporalmente."""
     quota_codes = {429, 503}
     quota_keywords = ["quota", "rate limit", "rate_limit", "too many requests",
                       "exceeded", "resource_exhausted", "ResourceExhausted"]
@@ -148,6 +174,16 @@ def is_quota_error(status_code: int, error_text: str) -> bool:
         return True
     error_lower = error_text.lower()
     return any(kw.lower() in error_lower for kw in quota_keywords)
+
+
+def is_permanent_error(status_code: int, error_text: str) -> bool:
+    """Detecta si el error indica key permanentemente inválida (403) — se excluye para siempre."""
+    if status_code == 403:
+        return True
+    permanent_keywords = ["api key not valid", "invalid api key", "permission denied",
+                          "api_key_invalid", "forbidden", "unauthorized"]
+    error_lower = error_text.lower()
+    return any(kw in error_lower for kw in permanent_keywords)
 
 
 def get_rotation_status() -> dict:

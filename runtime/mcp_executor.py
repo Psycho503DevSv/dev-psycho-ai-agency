@@ -386,6 +386,65 @@ class McpExecutor:
                 "sandbox": "docker"
             }
 
+    def _try_native_command(self, command: str, cwd: str) -> Optional[Dict[str, Any]]:
+        """
+        P2 Fix: Intercepta comandos Linux comunes y los ejecuta nativamente en Python/Windows.
+        Retorna None si el comando no fue interceptado (debe pasar a subprocess).
+        Retorna un dict de resultado si fue interceptado y ejecutado.
+        """
+        import shutil
+
+        cmd = command.strip()
+
+        # mkdir -p <path> → os.makedirs
+        if re.match(r'^mkdir\s+-p\s+', cmd) or re.match(r'^mkdir\s+', cmd):
+            parts = cmd.split(None, 2)
+            path_arg = parts[-1].strip().strip('"').strip("'")
+            if not os.path.isabs(path_arg):
+                path_arg = os.path.join(cwd, path_arg)
+            try:
+                os.makedirs(path_arg, exist_ok=True)
+                logger.info(f"[NativeCmd] mkdir nativo: {path_arg}")
+                return {"status": "SUCCESS", "stdout": f"Directorio creado: {path_arg}", "stderr": "", "code": 0}
+            except Exception as e:
+                return {"status": "FAIL", "stdout": "", "stderr": str(e), "code": 1}
+
+        # touch <file> → crear archivo vacío si no existe
+        if re.match(r'^touch\s+', cmd):
+            path_arg = cmd[6:].strip().strip('"').strip("'")
+            if not os.path.isabs(path_arg):
+                path_arg = os.path.join(cwd, path_arg)
+            try:
+                os.makedirs(os.path.dirname(path_arg) or ".", exist_ok=True)
+                if not os.path.exists(path_arg):
+                    with open(path_arg, "w") as f:
+                        pass
+                logger.info(f"[NativeCmd] touch nativo: {path_arg}")
+                return {"status": "SUCCESS", "stdout": f"Archivo creado: {path_arg}", "stderr": "", "code": 0}
+            except Exception as e:
+                return {"status": "FAIL", "stdout": "", "stderr": str(e), "code": 1}
+
+        # pwd → retornar cwd actual
+        if cmd.strip() == "pwd":
+            return {"status": "SUCCESS", "stdout": cwd, "stderr": "", "code": 0}
+
+        # ls / ls -la → listar directorio
+        if re.match(r'^ls(\s+-[la]+)?(\s+.*)?$', cmd):
+            parts = cmd.split()
+            target = cwd
+            if len(parts) > 1 and not parts[-1].startswith("-"):
+                target = parts[-1].strip('"').strip("'")
+                if not os.path.isabs(target):
+                    target = os.path.join(cwd, target)
+            try:
+                items = os.listdir(target)
+                return {"status": "SUCCESS", "stdout": "\n".join(items), "stderr": "", "code": 0}
+            except Exception as e:
+                return {"status": "FAIL", "stdout": "", "stderr": str(e), "code": 1}
+
+        # No interceptado — dejar pasar a subprocess
+        return None
+
     def _tool_run_command(self, args: Dict[str, Any]) -> Dict[str, Any]:
         try:
             # Validación estricta del comando de entrada usando Pydantic
@@ -433,6 +492,13 @@ class McpExecutor:
             resolved_cwd = self._resolve_path(cwd)
 
         logger.info(f"Ejecutando comando: '{command}' en '{resolved_cwd}'")
+
+        # P2 Fix: Interceptar comandos Linux comunes y ejecutarlos nativamente en Windows.
+        # Los agentes LLM generan comandos Unix (mkdir -p, rm -rf, etc.) que fallan en PowerShell.
+        cmd_stripped = command.strip()
+        native_result = self._try_native_command(cmd_stripped, resolved_cwd)
+        if native_result is not None:
+            return native_result
 
         try:
             result = subprocess.run(

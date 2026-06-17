@@ -135,15 +135,17 @@ class WorkflowRunner:
         """
         import time
         try:
-            from runtime.key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error
+            from runtime.key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error, is_permanent_error
         except ImportError:
             sys.path.append(os.path.dirname(__file__))
-            from key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error
+            from key_rotator import parse_keys, get_active_key, mark_key_exhausted, is_quota_error, is_permanent_error
 
         openai_key = getattr(settings, "OPENAI_API_KEY", "")
         anthropic_key = getattr(settings, "ANTHROPIC_API_KEY", "")
         gemini_raw = getattr(settings, "GEMINI_API_KEY", "")
         groq_raw = getattr(settings, "GROQ_API_KEY", "")
+
+        nvidia_key = getattr(settings, "NVIDIA_API_KEY", "")
 
         gemini_keys = parse_keys(gemini_raw)
         groq_keys = parse_keys(groq_raw)
@@ -151,27 +153,23 @@ class WorkflowRunner:
         is_complex_agent = agent_id in ["psycho-ceo", "product-manager", "ai-architect"]
 
         # ── Construir la lista de "slots" de proveedores ──
-        # Cada slot de Gemini/Groq es un proveedor independiente con su key activa del pool.
-        # Si la key activa falla por cuota, se marca y se pasa al siguiente slot.
+        # P0 Fix: Un slot por cada key Gemini (no solo la activa) para rotación determinística.
+        # Si la key activa tiene 403, la siguiente key del slot llega a Groq correctamente.
         provider_slots = []
 
-        # ── Gemini (multi-key con rotador) ──
+        # ── Gemini (un slot por cada key del pool) ──
         if gemini_keys:
-            gemini_model = getattr(settings, "GEMINI_COMPLEX_MODEL", "gemini-2.5-pro") if is_complex_agent else getattr(settings, "GEMINI_SIMPLE_MODEL", "gemini-2.0-flash")
-            # Intentaremos cada key del pool en orden (la activa primero, luego las demás)
-            for offset in range(len(gemini_keys)):
-                active_key = get_active_key("gemini", gemini_keys)
-                if active_key:
-                    provider_slots.append({
-                        "name": f"Gemini[{gemini_keys.index(active_key)}]",
-                        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                        "key": active_key,
-                        "model": gemini_model,
-                        "is_anthropic": False,
-                        "pool_name": "gemini",
-                        "all_keys": gemini_keys,
-                    })
-                    break  # Iniciamos con una sola key; la rotación ocurre en caso de fallo
+            gemini_model = getattr(settings, "GEMINI_COMPLEX_MODEL", "gemini-2.5-flash") if is_complex_agent else getattr(settings, "GEMINI_SIMPLE_MODEL", "gemini-2.5-flash-lite")
+            for idx, key in enumerate(gemini_keys):
+                provider_slots.append({
+                    "name": f"Gemini[{idx}]",
+                    "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    "key": key,
+                    "model": gemini_model,
+                    "is_anthropic": False,
+                    "pool_name": "gemini",
+                    "all_keys": gemini_keys,
+                })
 
         # ── Groq (multi-key con rotador) ──
         if groq_keys:
@@ -207,6 +205,18 @@ class WorkflowRunner:
                 "url": "https://api.openai.com/v1/chat/completions",
                 "key": openai_key,
                 "model": "gpt-4o",
+                "is_anthropic": False,
+                "pool_name": None,
+                "all_keys": [],
+            })
+
+        # ── NVIDIA NIM (fallback final para agentes) ──
+        if nvidia_key:
+            provider_slots.append({
+                "name": "NVIDIA",
+                "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+                "key": nvidia_key,
+                "model": "meta/llama-3.1-70b-instruct",
                 "is_anthropic": False,
                 "pool_name": None,
                 "all_keys": [],
@@ -275,8 +285,10 @@ class WorkflowRunner:
                 if system_text:
                     payload["system"] = system_text.strip()
             elif provider.get("pool_name") == "gemini":
+                # P0 Fix: Usar x-goog-api-key (no Authorization: Bearer) para la API de Gemini.
+                # Authorization: Bearer causa 403 Forbidden en keys AQ.* de Google AI Studio.
                 headers = {
-                    "Authorization": f"Bearer {provider['key']}",
+                    "x-goog-api-key": provider["key"],
                     "Content-Type": "application/json",
                 }
                 payload = {
@@ -357,12 +369,40 @@ class WorkflowRunner:
                     if provider.get("is_anthropic"):
                         return res_data["content"][0]["text"]
                     else:
-                        return res_data["choices"][0]["message"]["content"]
+                        # P0 Fix: safe parse — Gemini a veces retorna content: null o sin content.
+                        # En lugar de lanzar KeyError, rotar key o bajar al siguiente proveedor.
+                        msg = res_data.get("choices", [{}])[0].get("message", {})
+                        text = msg.get("content") or msg.get("text") or ""
+                        if not text.strip():
+                            success = False
+                            logger.warning(
+                                f"[{provider['name']}] Respuesta HTTP 200 pero content vacío/null. "
+                                f"Rotando al siguiente proveedor."
+                            )
+                            # Si tiene pool, marcar como agotada temporalmente y rotar
+                            if pool_name:
+                                mark_key_exhausted(pool_name, all_keys, provider["key"], permanent=False)
+                                tried_keys[pool_name].append(provider["key"])
+                            break  # Salir del bucle de reintentos; el externo rota
+                        return text
 
                 except requests.exceptions.HTTPError as e:
                     last_exception = e
                     status_code = e.response.status_code if e.response is not None else 0
                     error_text = e.response.text if e.response is not None else str(e)
+
+                    # P0 Fix: 403 = key permanentemente inválida — rotar y excluir para siempre.
+                    # 429/503 = cuota agotada — rotar y reintentar mañana.
+                    if pool_name and is_permanent_error(status_code, error_text):
+                        logger.error(
+                            f"[KeyRotator] {provider['name']}: Key inválida permanente ({status_code}). "
+                            f"Excluida del pool para siempre."
+                        )
+                        mark_key_exhausted(pool_name, all_keys, provider["key"], permanent=True)
+                        if pool_name not in tried_keys:
+                            tried_keys[pool_name] = []
+                        tried_keys[pool_name].append(provider["key"])
+                        break  # Rotar inmediatamente, sin reintentos
 
                     # ── Rotación inmediata por cuota/rate-limit ──
                     if pool_name and is_quota_error(status_code, error_text):
@@ -852,12 +892,33 @@ Cuando hayas completado todas las tareas del paso, escribe obligatoriamente 'REP
                 logger.error(f"Error ejecutando paso {agent_id}: {str(e)}")
                 self.status = "FAILED"
                 logger.info(f"STATUS CHANGE: {self.status} - Excepción en paso {agent_id}. Ejecución interrumpida.")
+
+                # P3 Fix: Guardar checkpoint parcial para permitir resume desde el paso que falló.
+                # Antes solo se guardaba en SIGINT; ahora también en FAIL de un paso.
+                try:
+                    memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+                    os.makedirs(memory_dir, exist_ok=True)
+                    checkpoint_file = os.path.join(memory_dir, "interrupted_state.json")
+                    with open(checkpoint_file, "w", encoding="utf-8") as cf:
+                        json.dump({
+                            "workflow_id": workflow_id,
+                            "project_name": project_name,
+                            "completed_steps": list(steps_execution),
+                            "failed_step": agent_id,
+                            "error": str(e),
+                            "timestamp": datetime.now().isoformat(),
+                        }, cf, indent=2, ensure_ascii=False)
+                    logger.info(f"[CHECKPOINT] Estado parcial guardado ({len(steps_execution)} pasos completados). Resume desde: {agent_id}")
+                except Exception as ce:
+                    logger.warning(f"[CHECKPOINT] No se pudo guardar checkpoint parcial: {ce}")
+
                 try:
                     update_dashboard_state({"status": "FAILED"})
                     add_dashboard_log(f"Fallo en paso {agent_id}: {str(e)}")
                 except Exception:
                     pass
-                return {"status": "FAIL", "error": str(e), "completed_steps": steps_execution}
+                return {"status": "FAIL", "error": str(e), "completed_steps": steps_execution, "failed_step": agent_id}
+
 
         # Quality Gate Integrado si es implementación o evaluación
         gate_result = None
