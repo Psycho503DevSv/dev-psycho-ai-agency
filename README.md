@@ -26,16 +26,20 @@ Esta separación de responsabilidades garantiza la mayor calidad de código posi
 
 ## 🚀 Características Principales
 
-* **Bucle Real de Agentes (Real Agent Loop):** Ejecución de inferencia dinámica usando llamadas directas a APIs HTTP. Los agentes razonan, deciden y llaman herramientas locales en bucles interactivos de hasta 5 turnos. Prioridad nativa para la API de **NVIDIA NIM** (`meta/llama-3.1-8b-instruct`) con fallback a **OpenAI** (`gpt-4o-mini`).
+* **Bucle Real de Agentes (Real Agent Loop):** Ejecución de inferencia dinámica usando llamadas directas a APIs HTTP. Los agentes razonan, deciden y llaman herramientas locales en bucles interactivos de hasta 5 turnos. Prioridad nativa para la API de **NVIDIA NIM** (`meta/llama-3.1-8b-instruct`) con fallbacks configurables a **OpenAI**, **Anthropic**, **Gemini** y **Groq**.
+* **Rotación Inteligente de Claves (Multi-Key):** Soporte para pools de múltiples API Keys separadas por comas para **Gemini** y **Groq**. El sistema implementa:
+  * *Rotación por cuota:* Cambia de clave automáticamente al recibir errores `429 Too Many Requests` o fallos de timeout.
+  * *Rotación diaria:* Cicla entre el pool de claves cada 24 horas para balancear el consumo de tokens de forma equitativa.
 * **Tipos de Proyecto Nativos:** Soporte y flujo diferenciado para 5 categorías de desarrollo mediante un registro unificado (`registry/project-types-registry.json`):
   * 🌐 `web-estatica`: Prototipos visuales y landing pages en HTML/CSS/JS puro.
-  * ⚛️ `web-framework`: Aplicaciones modernas usando React, Vue o Vite.
+  * ⚛️ `web-framework`: Aplicaciones modernas usando React, Vue o Vite (con detección inteligente de `nextjs-monorepo`).
   * 📱 `android-apk`: Compilación directa con Gradle y despliegue físico en emuladores/dispositivos mediante ADB.
   * 🧩 `chrome-extension`: Extensiones de Chrome listas para carga en modo desarrollador.
   * 🎭 `kinetic-typography`: Animaciones de tipografía cinética interactivas (GSAP, Three.js).
 * **Previsualización Nativa Automatizada (`preview_project`):** Herramienta MCP capaz de levantar servidores HTTP locales, correr scripts de desarrollo (`npm run dev`), instalar y reemplazar APKs sin duplicados (`adb install -r` con reemplazo de versión), y lanzar Chrome con extensiones cargadas automáticamente.
+* **Limpieza Segura del Sandbox (`clean_project_dir`):** Nueva herramienta nativa que permite limpiar subcarpetas específicas dentro del proyecto activo de forma segura, respetando el sandbox y evitando bloqueos de seguridad al recrear scaffolds (por ejemplo, al ejecutar `create-next-app` o `npm init`).
 * **Entrevista de Diseño Interactiva (`ask_user`):** Los agentes pausan su ejecución para preguntarte detalles estéticos (colores, tipografías, fondos degradados, animaciones, tipo de proyecto) antes de escribir una sola línea de código.
-* **Quality Gate Integrado:** El validador estático automático corre antes de cerrar cualquier sprint de desarrollo para asegurar que la sintaxis Python sea correcta y que los archivos obligatorios (`README.md` y `requirements.txt`) estén presentes.
+* **Quality Gate y Validación de Compilación Real:** Validador automático que ejecuta análisis sintácticos y comprueba la presencia de archivos obligatorios (`README.md`, `requirements.txt`). Además, en proyectos de Node.js/web-framework, el gate realiza un `npm install` y un build real de compilación (`npm run build`) para garantizar que la entrega no tenga errores de tipado o dependencias.
 * **Sistema Auto-Learner:** Cuando un flujo termina, el sistema extrae automáticamente los errores del Quality Gate y los documenta en `memory/lessons_learned.md` para evitar regresiones y asegurar que el equipo no vuelva a cometer el mismo fallo.
 
 ---
@@ -68,17 +72,35 @@ pip install -r requirements.txt
 ```
 
 ### 4. Configurar Variables de Entorno (`.env`)
-Para que los agentes realicen llamadas reales de razonamiento, crea un archivo `.env` en la raíz del proyecto. El motor prioriza NVIDIA NIM para un procesamiento ultra veloz y gratuito:
+Crea un archivo `.env` en la raíz del proyecto. El motor soporta múltiples proveedores y rotación inteligente de claves. Configura tus tokens según tus necesidades:
 
 ```env
-# Clave API de NVIDIA NIM (Recomendada - Prioritaria)
-# Consíguela gratis en: https://build.nvidia.com/
+# ── Gemini (Google AI Studio — Soporta multi-key separadas por comas)
+# Consíguelas gratis en: https://aistudio.google.com/apikey
+GEMINI_API_KEY=AIzaSyKey1,AIzaSyKey2,AIzaSyKey3
+
+# ── Groq (Velocidad muy alta — Soporta multi-key separadas por comas)
+# Consíguelas gratis en: https://console.groq.com/keys
+GROQ_API_KEY=gsk_key1,gsk_key2
+
+# ── NVIDIA NIM (Auto-Aprendizaje / Memoria)
 NVIDIA_API_KEY=nvapi-tu_clave_aquí
 
-# Clave API de OpenAI (Opcional - Fallback)
+# ── Proveedores de pago / Otras APIs
 OPENAI_API_KEY=sk-proj-tu_clave_aquí
+ANTHROPIC_API_KEY=sk-ant-tu_clave_aquí
 
-# Configuración de Grafo de Memoria Opcional (Falso por defecto)
+# ── Integraciones de Despliegue del Usuario (Opcionales)
+# Registra tus propios tokens de desarrollo para que los agentes puedan realizar 
+# despliegues en Vercel, interactuar con bases de datos Supabase o hacer push a GitHub.
+VERCEL_TOKEN=tkn_tu_token_de_vercel
+SUPABASE_URL=https://tu_proyecto.supabase.co
+SUPABASE_ANON_KEY=tu_anon_key
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+SUPABASE_DB_URL=postgresql://postgres:password@db.tu_proyecto.supabase.co:5432/postgres
+GITHUB_TOKEN=ghp_tu_token_de_github
+
+# ── Configuración de Grafo de Memoria
 USE_GRAPHITI=false
 ```
 *Si no configuras ninguna clave de API, el sistema correrá los pasos en **Modo Simulación** de manera gratuita sin consumir créditos ni tokens.*

@@ -44,6 +44,14 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
+# ── Integraciones de Despliegue del Usuario ──
+VERCEL_TOKEN = os.getenv("VERCEL_TOKEN", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+
 # Models Configuration
 GROQ_COMPLEX_MODEL = os.getenv("GROQ_COMPLEX_MODEL", "llama-3.3-70b-versatile")
 GROQ_SIMPLE_MODEL = os.getenv("GROQ_SIMPLE_MODEL", "llama-3.1-8b-instant")
