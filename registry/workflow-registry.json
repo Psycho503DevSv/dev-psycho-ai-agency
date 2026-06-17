@@ -41,6 +41,13 @@
       "trigger": "User spec for new tool",
       "steps": ["psycho-ceo", "product-manager", "ai-architect", "frontend", "backend", "agent-evaluator"],
       "output_file": "projects/{project_name}/*"
+    },
+    {
+      "id": "wf-supabase-setup",
+      "name": "Supabase Database Setup",
+      "trigger": "Request to setup or migrate Supabase database",
+      "steps": ["psycho-ceo", "backend", "agent-evaluator"],
+      "output_file": "memory/projects/{project_name}/database_setup.json"
     }
   ]
 }

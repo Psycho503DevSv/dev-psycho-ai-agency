@@ -202,3 +202,91 @@ def test_mcp_executor_mkdir_multi_path(temp_project):
     assert os.path.exists(admin_dir)
     assert not os.path.exists(space_dir)
 
+
+def test_mcp_executor_supabase_vercel_tools(temp_project, monkeypatch):
+    import sys
+    from unittest.mock import MagicMock
+    
+    # Mock pg8000 module dynamically to avoid ModuleNotFoundError
+    mock_pg8000 = MagicMock()
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    
+    mock_cursor.fetchall.return_value = [("profiles",), ("categories",), ("products",), ("orders",), ("order_items",)]
+    mock_conn.cursor.return_value = mock_cursor
+    mock_pg8000.connect.return_value = mock_conn
+    sys.modules["pg8000"] = mock_pg8000
+
+    # Mocking environment variables
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://postgres:pass@localhost:5432/postgres")
+    monkeypatch.setenv("SUPABASE_URL", "https://xyz.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
+    monkeypatch.setenv("VERCEL_TOKEN", "vercel-token")
+
+    executor = McpExecutor(base_dir=temp_project)
+    executor.active_project_name = "test-project"
+    
+    # Mock _tool_ask_user to always return "si"
+    monkeypatch.setattr(executor, "_tool_ask_user", lambda args: {"status": "SUCCESS", "response": "si"})
+
+    # 1. Test Supabase Verify Tables
+    res_verify = executor.execute_tool("supabase_verify_tables", {"expected_tables": ["profiles", "products"]})
+    assert res_verify["status"] == "SUCCESS"
+
+    # 2. Test Supabase Run Migration
+    mig_file = os.path.join(temp_project, "migration.sql")
+    with open(mig_file, "w") as f:
+        f.write("CREATE TABLE dummy (id INT);")
+    res_migration = executor.execute_tool("supabase_run_migration", {"sql_file": "migration.sql"})
+    assert res_migration["status"] == "SUCCESS"
+
+    # 3. Test Supabase Seed Data
+    seed_file = os.path.join(temp_project, "seed.sql")
+    with open(seed_file, "w") as f:
+        f.write("INSERT INTO dummy VALUES (1);")
+    res_seed = executor.execute_tool("supabase_seed_data", {"seed_file": "seed.sql"})
+    assert res_seed["status"] == "SUCCESS"
+
+    # 4. Test Supabase Storage Bucket
+    import requests
+    class MockResponse:
+        status_code = 200
+        text = "Created"
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: MockResponse())
+    res_bucket = executor.execute_tool("supabase_create_storage_bucket", {"name": "avatars", "public": True})
+    assert res_bucket["status"] == "SUCCESS"
+
+    # 5. Test Vercel Tools
+    import subprocess
+    class MockSubprocessRes:
+        returncode = 0
+        stdout = "https://my-app.vercel.app\n"
+        stderr = ""
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: MockSubprocessRes())
+
+    res_vercel_link = executor.execute_tool("vercel_link_project", {"web_dir": ".", "project_name": "my-project"})
+    assert res_vercel_link["status"] == "SUCCESS"
+
+    res_vercel_env = executor.execute_tool("vercel_set_env", {"web_dir": ".", "env_vars": {"A": "1"}})
+    assert res_vercel_env["status"] == "SUCCESS"
+
+    res_vercel_deploy = executor.execute_tool("vercel_deploy_prod", {"web_dir": "."})
+    assert res_vercel_deploy["status"] == "SUCCESS"
+    assert "vercel.app" in res_vercel_deploy["url"]
+
+    # 6. Test QualityGate Database Verification Check
+    # Create package.json and README.md to make it pass structure validation
+    with open(os.path.join(temp_project, "package.json"), "w") as f:
+        f.write('{"scripts": {"build": "echo 1"}}')
+    with open(os.path.join(temp_project, "README.md"), "w") as f:
+        f.write("# Demo")
+
+    # Mock subprocess.run for npm install and build
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: MockSubprocessRes())
+
+    gate = QualityGate(temp_project)
+    res_gate = gate.run()
+    assert res_gate["status"] == "SUCCESS"
+
+
+

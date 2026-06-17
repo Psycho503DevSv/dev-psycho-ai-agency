@@ -549,14 +549,24 @@ Puedes usar herramientas locales para cumplir tu objetivo escribiendo un bloque 
 ```
 
 Herramientas disponibles (SOLO estas, NO inventes otras):
-- `ask_user`: {{"question": "¿Qué colores prefieres para el diseño de la tienda?"}}
+- `ask_user`: {{"question": "¿Qué colores prefieres?"}}
 - `read_file`: {{"path": "memory/projects/{project_name}/requirements.md"}}
-- `write_file`: {{"path": "memory/projects/{project_name}/requirements.md", "content": "# Requisitos del Proyecto\\n\\n..."}}
+- `write_file`: {{"path": "memory/projects/{project_name}/requirements.md", "content": "..."}}
 - `list_dir`: {{"path": "projects/{project_name}"}}
 - `clean_project_dir`: {{"path": "projects/{project_name}/web"}}
 - `search_code`: {{"query": "const database"}}
 - `run_command`: {{"command": "npm run build", "cwd": "projects/{project_name}"}}
 - `preview_project`: {{"project_type": "web-framework", "project_path": "projects/{project_name}"}}
+- `supabase_run_migration`: {{"sql_file": "templates/database/ecommerce_schema.sql"}}
+- `supabase_verify_tables`: {{"expected_tables": ["profiles", "products"]}}
+- `supabase_create_storage_bucket`: {{"name": "avatars", "public": true}}
+- `supabase_seed_data`: {{"seed_file": "projects/{project_name}/seed.sql"}}
+- `vercel_link_project`: {{"web_dir": "projects/{project_name}/web", "project_name": "mi-proyecto-web"}}
+- `vercel_set_env`: {{"web_dir": "projects/{project_name}/web", "env_vars": {{"NEXT_PUBLIC_SUPABASE_URL": "https://..."}}}}
+- `vercel_deploy_prod`: {{"web_dir": "projects/{project_name}/web"}}
+
+=== REGLA DE CONSENTIMIENTO OBLIGATORIO ===
+Antes de ejecutar cualquier herramienta que altere el estado remoto (como `supabase_run_migration`, `supabase_create_storage_bucket`, `supabase_seed_data`, `vercel_link_project`, `vercel_set_env` y `vercel_deploy_prod`), el agente debe OBLIGATORIAMENTE preguntar al usuario mediante `ask_user` para obtener su confirmación explícita (ej. "¿Deseas que ejecute la migración SQL en Supabase ahora?"). No procedas sin su aprobación directa.
 
 IMPORTANTE: Usa `ask_user` para entrevistar al usuario y entender qué proyecto construir. No inventes rutas de placeholders genéricos como 'ruta/relativa' o 'contenido', usa siempre rutas basadas en tu proyecto.
 NO uses herramientas como 'Apache Airflow', 'Docker Compose', 'Makefile', 'Python', 'Bash', 'npm' como herramientas MCP — no existen.

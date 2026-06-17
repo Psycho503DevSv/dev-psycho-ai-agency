@@ -256,6 +256,58 @@ class QualityGate:
                 )
                 return False
             logger.info("Build del proyecto completado exitosamente.")
+            
+            # --- Validar esquema de base de datos Supabase si aplica ---
+            # Si el proyecto tiene un package.json y usa Supabase o si es e-commerce
+            is_ecommerce = "ecommerce" in self.project_path.lower()
+            supabase_url = os.getenv("SUPABASE_URL", "")
+            supabase_db_url = os.getenv("SUPABASE_DB_URL", "")
+            if (is_ecommerce or supabase_url) and supabase_db_url:
+                logger.info("Validando tablas requeridas en base de datos Supabase...")
+                expected_tables = ["profiles", "categories", "products", "orders", "order_items"]
+                try:
+                    import pg8000
+                except ImportError:
+                    logger.info("Instalando pg8000 dinámicamente para validación de base de datos...")
+                    import subprocess as sp
+                    sp.run("pip install pg8000", shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
+                    import pg8000
+                
+                try:
+                    # Conectar a Supabase PostgreSQL via connection string
+                    # Ej: postgresql://postgres:password@db.tu_proyecto.supabase.co:5432/postgres
+                    url_clean = supabase_db_url.replace("postgresql://", "")
+                    creds, host_port_db = url_clean.split("@")
+                    user, password = creds.split(":")
+                    host_port, db = host_port_db.split("/")
+                    if ":" in host_port:
+                        host, port = host_port.split(":")
+                        port = int(port)
+                    else:
+                        host = host_port
+                        port = 5432
+                        
+                    conn = pg8000.connect(user=user, password=password, host=host, port=port, database=db, timeout=10)
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
+                    )
+                    existing_tables = [row[0] for row in cursor.fetchall()]
+                    cursor.close()
+                    conn.close()
+                    
+                    missing_tables = [t for t in expected_tables if t not in existing_tables]
+                    if missing_tables:
+                        self.errors.append(
+                            f"DATABASE_VALIDATION_FAILED: Faltan las siguientes tablas requeridas en Supabase: {', '.join(missing_tables)}"
+                        )
+                        return False
+                    logger.info("Validación de base de datos exitosa: Todas las tablas requeridas están presentes.")
+                except Exception as db_err:
+                    # Si falla por credenciales o timeout
+                    self.errors.append(f"DATABASE_CONNECTION_ERROR: No se pudo conectar a Supabase para validar las tablas: {str(db_err)}")
+                    return False
+
             return True
         except Exception as e:
             self.errors.append(f"BUILD_ERROR: Fallo al ejecutar el build '{build_cmd}': {str(e)}")

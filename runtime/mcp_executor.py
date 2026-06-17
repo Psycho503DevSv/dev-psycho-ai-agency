@@ -830,7 +830,296 @@ class McpExecutor:
                 "project_type": project_type
             }
 
+            return {
+                "status": "SUCCESS",
+                "message": f"Chrome lanzado con extensión cargada desde: {resolved_path}",
+                "project_type": project_type
+            }
+
         return {"status": "FAIL", "error": "Tipo no manejado."}
+
+    # --- Herramientas de Integración de Despliegue del Usuario ---
+
+    def _confirm_action(self, action_name: str, details: str) -> bool:
+        """Solicita confirmación explícita al usuario para acciones destructivas o remotas."""
+        logger.info(f"Solicitando confirmación para acción remota '{action_name}': {details}")
+        question = f"¿Autorizas la ejecución de la acción '{action_name}'?\nDetalles: {details}\nResponde 'si' o 'no'."
+        res = self._tool_ask_user({"question": question})
+        if res.get("status") == "SUCCESS":
+            answer = str(res.get("response", "")).strip().lower()
+            return answer in ("si", "sí", "yes", "confirm", "confirmo", "autorizo")
+        return False
+
+    def _tool_supabase_run_migration(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        sql_file = args.get("sql_file", "")
+        if not sql_file:
+            return {"status": "FAIL", "error": "Falta el argumento obligatorio 'sql_file'."}
+            
+        resolved_sql = self._resolve_path(sql_file)
+        if not os.path.exists(resolved_sql):
+            return {"status": "FAIL", "error": f"Archivo SQL de migración no encontrado: {sql_file}"}
+
+        # Confirmación de seguridad
+        if not self._confirm_action("supabase_run_migration", f"Ejecutar archivo SQL {sql_file} en Supabase"):
+            return {"status": "FAIL", "error": "Acción cancelada por el usuario."}
+
+        supabase_db_url = os.getenv("SUPABASE_DB_URL", "")
+        if not supabase_db_url:
+            return {"status": "FAIL", "error": "La variable de entorno SUPABASE_DB_URL no está configurada."}
+
+        try:
+            with open(resolved_sql, "r", encoding="utf-8") as f:
+                sql_content = f.read()
+
+            try:
+                import pg8000
+            except ImportError:
+                logger.info("Instalando pg8000 en caliente...")
+                subprocess.run("pip install pg8000", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                import pg8000
+
+            # Conexión Postgres
+            url_clean = supabase_db_url.replace("postgresql://", "")
+            creds, host_port_db = url_clean.split("@")
+            user, password = creds.split(":")
+            host_port, db = host_port_db.split("/")
+            if ":" in host_port:
+                host, port = host_port.split(":")
+                port = int(port)
+            else:
+                host = host_port
+                port = 5432
+
+            conn = pg8000.connect(user=user, password=password, host=host, port=port, database=db, timeout=15)
+            cursor = conn.cursor()
+            
+            # Ejecutar comandos SQL individuales
+            # Separar comandos por punto y coma simples (una heurística simple para scripts SQL comunes)
+            commands = [cmd.strip() for cmd in sql_content.split(";") if cmd.strip()]
+            for cmd in commands:
+                cursor.execute(cmd)
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return {"status": "SUCCESS", "message": f"Migración ejecutada con éxito desde {sql_file}"}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Fallo al ejecutar migración en Supabase: {str(e)}"}
+
+    def _tool_supabase_verify_tables(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        expected_tables = args.get("expected_tables", [])
+        if not expected_tables:
+            return {"status": "FAIL", "error": "Falta el argumento obligatorio 'expected_tables'."}
+
+        supabase_db_url = os.getenv("SUPABASE_DB_URL", "")
+        if not supabase_db_url:
+            return {"status": "FAIL", "error": "La variable de entorno SUPABASE_DB_URL no está configurada."}
+
+        try:
+            try:
+                import pg8000
+            except ImportError:
+                subprocess.run("pip install pg8000", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                import pg8000
+
+            url_clean = supabase_db_url.replace("postgresql://", "")
+            creds, host_port_db = url_clean.split("@")
+            user, password = creds.split(":")
+            host_port, db = host_port_db.split("/")
+            if ":" in host_port:
+                host, port = host_port.split(":")
+                port = int(port)
+            else:
+                host = host_port
+                port = 5432
+
+            conn = pg8000.connect(user=user, password=password, host=host, port=port, database=db, timeout=10)
+            cursor = conn.cursor()
+            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';")
+            existing_tables = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+
+            missing = [t for t in expected_tables if t not in existing_tables]
+            if missing:
+                return {
+                    "status": "FAIL",
+                    "error": f"Faltan tablas en el esquema público: {', '.join(missing)}",
+                    "missing_tables": missing
+                }
+            return {"status": "SUCCESS", "message": "Todas las tablas esperadas existen en Supabase."}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Error verificando tablas: {str(e)}"}
+
+    def _tool_supabase_create_storage_bucket(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        name = args.get("name", "")
+        if not name:
+            return {"status": "FAIL", "error": "Falta el argumento obligatorio 'name'."}
+
+        # Confirmación de seguridad
+        if not self._confirm_action("supabase_create_storage_bucket", f"Crear bucket de storage '{name}' en Supabase"):
+            return {"status": "FAIL", "error": "Acción cancelada por el usuario."}
+
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+        if not supabase_url or not service_key:
+            return {"status": "FAIL", "error": "SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY no configurados."}
+
+        import requests
+        api_url = f"{supabase_url.rstrip('/')}/storage/v1/bucket"
+        headers = {
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "id": name,
+            "name": name,
+            "public": args.get("public", True)
+        }
+        try:
+            res = requests.post(api_url, json=payload, headers=headers, timeout=10)
+            if res.status_code in (200, 201):
+                return {"status": "SUCCESS", "message": f"Bucket '{name}' creado exitosamente."}
+            else:
+                return {"status": "FAIL", "error": f"Respuesta de API de Supabase ({res.status_code}): {res.text}"}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Fallo al conectar con la API de Supabase: {str(e)}"}
+
+    def _tool_supabase_seed_data(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        seed_file = args.get("seed_file", "")
+        if not seed_file:
+            return {"status": "FAIL", "error": "Falta el argumento obligatorio 'seed_file'."}
+            
+        resolved_seed = self._resolve_path(seed_file)
+        if not os.path.exists(resolved_seed):
+            return {"status": "FAIL", "error": f"Archivo de semilla no encontrado: {seed_file}"}
+
+        # Confirmación de seguridad
+        if not self._confirm_action("supabase_seed_data", f"Poblar base de datos usando {seed_file} en Supabase"):
+            return {"status": "FAIL", "error": "Acción cancelada por el usuario."}
+
+        supabase_db_url = os.getenv("SUPABASE_DB_URL", "")
+        if not supabase_db_url:
+            return {"status": "FAIL", "error": "La variable de entorno SUPABASE_DB_URL no está configurada."}
+
+        try:
+            with open(resolved_seed, "r", encoding="utf-8") as f:
+                sql_content = f.read()
+
+            try:
+                import pg8000
+            except ImportError:
+                subprocess.run("pip install pg8000", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                import pg8000
+
+            url_clean = supabase_db_url.replace("postgresql://", "")
+            creds, host_port_db = url_clean.split("@")
+            user, password = creds.split(":")
+            host_port, db = host_port_db.split("/")
+            if ":" in host_port:
+                host, port = host_port.split(":")
+                port = int(port)
+            else:
+                host = host_port
+                port = 5432
+
+            conn = pg8000.connect(user=user, password=password, host=host, port=port, database=db, timeout=15)
+            cursor = conn.cursor()
+            
+            # Ejecutar comandos de semilla
+            commands = [cmd.strip() for cmd in sql_content.split(";") if cmd.strip()]
+            for cmd in commands:
+                cursor.execute(cmd)
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return {"status": "SUCCESS", "message": f"Datos de semilla cargados exitosamente desde {seed_file}"}
+        except Exception as e:
+            return {"status": "FAIL", "error": f"Error ejecutando semilla: {str(e)}"}
+
+    def _tool_vercel_link_project(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        web_dir = args.get("web_dir", ".")
+        project_name = args.get("project_name", "")
+        if not project_name:
+            return {"status": "FAIL", "error": "Falta el argumento obligatorio 'project_name'."}
+
+        resolved_dir = self._resolve_path(web_dir)
+        token = os.getenv("VERCEL_TOKEN", "")
+        if not token:
+            return {"status": "FAIL", "error": "VERCEL_TOKEN no configurado."}
+
+        # Confirmación de seguridad
+        if not self._confirm_action("vercel_link_project", f"Vincular directorio {web_dir} con proyecto Vercel '{project_name}'"):
+            return {"status": "FAIL", "error": "Acción cancelada por el usuario."}
+
+        env = os.environ.copy()
+        env["VERCEL_TOKEN"] = token
+        cmd = f"npx vercel link --yes --project {project_name}"
+        res = subprocess.run(cmd, shell=True, cwd=resolved_dir, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res.returncode == 0:
+            return {"status": "SUCCESS", "message": f"Proyecto {project_name} vinculado exitosamente en Vercel."}
+        return {"status": "FAIL", "error": f"Fallo al vincular proyecto Vercel: {res.stderr}\nstdout: {res.stdout}"}
+
+    def _tool_vercel_set_env(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        web_dir = args.get("web_dir", ".")
+        env_vars = args.get("env_vars", {}) # Ej: {"NEXT_PUBLIC_SUPABASE_URL": "..."}
+        if not env_vars:
+            return {"status": "FAIL", "error": "Falta el argumento obligatorio 'env_vars'."}
+
+        resolved_dir = self._resolve_path(web_dir)
+        token = os.getenv("VERCEL_TOKEN", "")
+        if not token:
+            return {"status": "FAIL", "error": "VERCEL_TOKEN no configurado."}
+
+        # Confirmación de seguridad
+        if not self._confirm_action("vercel_set_env", f"Establecer variables de entorno en Vercel: {list(env_vars.keys())}"):
+            return {"status": "FAIL", "error": "Acción cancelada por el usuario."}
+
+        env = os.environ.copy()
+        env["VERCEL_TOKEN"] = token
+        
+        errors = []
+        for name, value in env_vars.items():
+            cmd = f"npx vercel env add {name} production"
+            # Vercel env add requiere ingresar el valor por stdin
+            res = subprocess.run(cmd, shell=True, cwd=resolved_dir, env=env, input=value, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                errors.append(f"{name}: {res.stderr}")
+
+        if errors:
+            return {"status": "FAIL", "error": "Error al inyectar algunas variables en Vercel: " + "; ".join(errors)}
+        return {"status": "SUCCESS", "message": "Todas las variables de entorno inyectadas con éxito en Vercel."}
+
+    def _tool_vercel_deploy_prod(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        web_dir = args.get("web_dir", ".")
+        resolved_dir = self._resolve_path(web_dir)
+        token = os.getenv("VERCEL_TOKEN", "")
+        if not token:
+            return {"status": "FAIL", "error": "VERCEL_TOKEN no configurado."}
+
+        # Confirmación de seguridad
+        if not self._confirm_action("vercel_deploy_prod", f"Realizar despliegue de producción en Vercel para {web_dir}"):
+            return {"status": "FAIL", "error": "Acción cancelada por el usuario."}
+
+        env = os.environ.copy()
+        env["VERCEL_TOKEN"] = token
+        cmd = "npx vercel --prod --yes"
+        res = subprocess.run(cmd, shell=True, cwd=resolved_dir, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res.returncode == 0:
+            # Intentar extraer la URL del proyecto desplegado de la salida de Vercel
+            url = ""
+            for line in res.stdout.splitlines():
+                if "https://" in line and ".vercel.app" in line:
+                    url = line.strip()
+                    break
+            return {
+                "status": "SUCCESS",
+                "message": f"Despliegue de producción exitoso. URL: {url or 'Desconocida'}",
+                "url": url,
+                "stdout": res.stdout
+            }
+        return {"status": "FAIL", "error": f"Fallo al desplegar en Vercel: {res.stderr}\nstdout: {res.stdout}"}
 
     def cleanup(self):
         """Detiene y remueve el contenedor del sandbox de Docker ordenadamente si está en ejecución."""
