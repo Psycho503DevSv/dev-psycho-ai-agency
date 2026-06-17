@@ -37,6 +37,8 @@ logs/
 memory/security_audit.log 
 memory/token_usage.json
 memory/key_rotation_state.json
+memory/dashboard_state.json
+memory/interrupted_state.json
 memory/sessions/
 ruta/
 node_modules/
