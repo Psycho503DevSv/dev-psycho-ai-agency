@@ -274,6 +274,16 @@ class WorkflowRunner:
                 }
                 if system_text:
                     payload["system"] = system_text.strip()
+            elif provider.get("pool_name") == "gemini":
+                headers = {
+                    "x-goog-api-key": provider["key"],
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": provider["model"],
+                    "messages": messages,
+                    "temperature": 0.2,
+                }
             else:
                 headers = {
                     "Authorization": f"Bearer {provider['key']}",
